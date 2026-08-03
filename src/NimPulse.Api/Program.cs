@@ -61,6 +61,16 @@ using (var scope = app.Services.CreateScope())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Kein Web-Frontend — nur API + iOS-Client. Ohne diese Route liefert die nackte Site-URL
+// einen nackten 404, was beim ersten Öffnen nach dem Deploy wie ein kaputtes Deployment aussieht.
+app.MapGet("/", () => Results.Ok(new
+{
+    service = "NimPulse API",
+    status = "running",
+    version = "siehe /api/v1/version",
+}));
+
 app.MapControllers();
 
 app.Run();
