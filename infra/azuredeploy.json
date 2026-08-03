@@ -1,0 +1,231 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "NimPulse — self-hosted family health platform. Provisions a Linux App Service Web App running the container from GHCR, a storage account with a File share mounted at /data for the SQLite metadata database, and a Blob container for generated reports. AI keys (Claude, Azure OpenAI) are stored as App Service settings."
+  },
+  "parameters": {
+    "siteName": {
+      "type": "string",
+      "metadata": {
+        "description": "Unique site name. Reachable at https://<siteName>.azurewebsites.net"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region — defaults to the resource group location."
+      }
+    },
+    "sku": {
+      "type": "string",
+      "defaultValue": "B1",
+      "allowedValues": [ "F1", "B1", "B2", "B3", "S1", "P1V3" ],
+      "metadata": {
+        "description": "App Service Plan SKU. B1 (~10 EUR/month, always-on) is enough for a family. Custom domains + free managed TLS certs need S1 or higher. F1 is free but sleeps when idle."
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/mnimtz/nimpulse:latest",
+      "metadata": {
+        "description": "Container image. Use a versioned tag (e.g. ghcr.io/mnimtz/nimpulse:0.1.0) for reproducible deployments."
+      }
+    },
+    "tz": {
+      "type": "string",
+      "defaultValue": "Europe/Berlin",
+      "metadata": {
+        "description": "IANA timezone for the runtime — affects report timestamps and weekly-insight scheduling."
+      }
+    },
+    "defaultLang": {
+      "type": "string",
+      "defaultValue": "de",
+      "allowedValues": [ "de", "en" ],
+      "metadata": {
+        "description": "Fallback UI language when the visitor's browser preference cannot be resolved. This project ships DE+EN only."
+      }
+    },
+    "anthropicApiKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Claude API key (console.anthropic.com). Leave empty and set it later in the App Service Configuration blade if you'd rather not paste secrets into the ARM deployment form."
+      }
+    },
+    "azureOpenAiEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure OpenAI resource endpoint, e.g. https://<resource>.openai.azure.com/ — only needed if you want the GPT-5.6 second opinion alongside Claude."
+      }
+    },
+    "azureOpenAiApiKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure OpenAI API key. Leave empty if you're only using Claude for now."
+      }
+    },
+    "azureOpenAiDeploymentName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "The deployment name you gave the GPT-5.6 model in the Azure OpenAI resource — not a raw OpenAI model ID."
+      }
+    }
+  },
+  "variables": {
+    "planName": "[concat(parameters('siteName'), '-plan')]",
+    "storageAccountName": "[concat('nimpulse', uniqueString(resourceGroup().id))]",
+    "dataShareName": "nimpulse-data",
+    "reportsContainerName": "reports"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "Standard_LRS" },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false,
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-05-01",
+      "name": "[concat(variables('storageAccountName'), '/default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "cors": {
+          "corsRules": [
+            {
+              "allowedOrigins": [ "[concat('https://', parameters('siteName'), '.azurewebsites.net')]" ],
+              "allowedMethods": [ "GET", "HEAD" ],
+              "allowedHeaders": [ "*" ],
+              "exposedHeaders": [ "*" ],
+              "maxAgeInSeconds": 3600
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[concat(variables('storageAccountName'), '/default/', variables('reportsContainerName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageAccountName'), 'default')]"
+      ],
+      "properties": { "publicAccess": "None" }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2023-05-01",
+      "name": "[concat(variables('storageAccountName'), '/default/', variables('dataShareName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": { "shareQuota": 5 }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('planName')]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "[parameters('sku')]" },
+      "kind": "linux",
+      "properties": { "reserved": true }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-12-01",
+      "name": "[parameters('siteName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux,container",
+      "identity": { "type": "SystemAssigned" },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('dataShareName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageAccountName'), 'default', variables('reportsContainerName'))]"
+      ],
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('planName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "[concat('DOCKER|', parameters('containerImage'))]",
+          "alwaysOn": "[if(equals(parameters('sku'), 'F1'), false(), true())]",
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "http20Enabled": true,
+          "appSettings": [
+            { "name": "WEBSITES_PORT", "value": "8080" },
+            { "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE", "value": "false" },
+            { "name": "DOCKER_REGISTRY_SERVER_URL", "value": "https://ghcr.io" },
+            { "name": "DOCKER_ENABLE_CI", "value": "true" },
+            { "name": "ASPNETCORE_ENVIRONMENT", "value": "Production" },
+            { "name": "ASPNETCORE_FORWARDEDHEADERS_ENABLED", "value": "true" },
+            { "name": "ConnectionStrings__Default", "value": "Data Source=/data/nimpulse.db;Cache=Shared" },
+            { "name": "Storage__ContainerName", "value": "[variables('reportsContainerName')]" },
+            { "name": "Storage__UseManagedIdentity", "value": "true" },
+            { "name": "Storage__AccountName", "value": "[variables('storageAccountName')]" },
+            { "name": "Localization__DefaultCulture", "value": "[parameters('defaultLang')]" },
+            { "name": "Localization__SupportedCultures", "value": "de,en" },
+            { "name": "TZ", "value": "[parameters('tz')]" },
+            { "name": "Ai__DefaultProvider", "value": "claude" },
+            { "name": "Ai__Claude__ApiKey", "value": "[parameters('anthropicApiKey')]" },
+            { "name": "Ai__Claude__Model", "value": "claude-sonnet-5" },
+            { "name": "Ai__AzureOpenAi__Endpoint", "value": "[parameters('azureOpenAiEndpoint')]" },
+            { "name": "Ai__AzureOpenAi__ApiKey", "value": "[parameters('azureOpenAiApiKey')]" },
+            { "name": "Ai__AzureOpenAi__DeploymentName", "value": "[parameters('azureOpenAiDeploymentName')]" }
+          ],
+          "azureStorageAccounts": {
+            "data": {
+              "type": "AzureFiles",
+              "accountName": "[variables('storageAccountName')]",
+              "shareName": "[variables('dataShareName')]",
+              "mountPath": "/data",
+              "accessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-05-01').keys[0].value]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), parameters('siteName'), 'Storage Blob Data Contributor')]",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}', variables('storageAccountName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('siteName'))]"
+      ],
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('siteName')), '2023-12-01', 'Full').identity.principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]"
+      }
+    }
+  ],
+  "outputs": {
+    "siteUrl": {
+      "type": "string",
+      "value": "[concat('https://', parameters('siteName'), '.azurewebsites.net')]"
+    },
+    "storageAccount": {
+      "type": "string",
+      "value": "[variables('storageAccountName')]"
+    },
+    "nextSteps": {
+      "type": "string",
+      "value": "Open the site URL. If you left the AI keys empty, set Ai__Claude__ApiKey (and optionally Ai__AzureOpenAi__*) in the App Service Configuration blade, then restart the app. SQLite on Azure Files is fine for a family — migrate to Azure SQL only if you outgrow it (see the concept doc, Phase 4)."
+    }
+  }
+}

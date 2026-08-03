@@ -1,0 +1,20 @@
+bin/
+obj/
+*.user
+.vs/
+.vscode/
+
+# iOS / Xcode
+ios/**/*.xcodeproj/
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/.build/
+
+# Secrets — never commit
+appsettings.Development.json
+appsettings.Local.json
+.env
+*.pfx
+*.p12
+
+.DS_Store
