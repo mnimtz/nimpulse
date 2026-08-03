@@ -75,13 +75,21 @@
       "metadata": {
         "description": "The deployment name you gave the GPT-5.6 model in the Azure OpenAI resource — not a raw OpenAI model ID."
       }
+    },
+    "jwtSigningKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Signing key for login tokens. Leave empty to auto-generate a unique one per deployment (recommended) — only set this explicitly if you need a stable key across redeploys."
+      }
     }
   },
   "variables": {
     "planName": "[concat(parameters('siteName'), '-plan')]",
     "storageAccountName": "[concat('nimpulse', uniqueString(resourceGroup().id))]",
     "dataShareName": "nimpulse-data",
-    "reportsContainerName": "reports"
+    "reportsContainerName": "reports",
+    "jwtSigningKey": "[if(empty(parameters('jwtSigningKey')), guid(resourceGroup().id, parameters('siteName'), 'jwt-signing-key'), parameters('jwtSigningKey'))]"
   },
   "resources": [
     {
@@ -180,6 +188,7 @@
             { "name": "Localization__DefaultCulture", "value": "[parameters('defaultLang')]" },
             { "name": "Localization__SupportedCultures", "value": "de,en" },
             { "name": "TZ", "value": "[parameters('tz')]" },
+            { "name": "Auth__JwtSigningKey", "value": "[variables('jwtSigningKey')]" },
             { "name": "Ai__DefaultProvider", "value": "claude" },
             { "name": "Ai__Claude__ApiKey", "value": "[parameters('anthropicApiKey')]" },
             { "name": "Ai__Claude__Model", "value": "claude-sonnet-5" },

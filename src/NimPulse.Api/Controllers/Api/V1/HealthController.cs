@@ -1,16 +1,19 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using NimPulse.Core.Auth;
 using NimPulse.Core.Health;
 
 namespace NimPulse.Api.Controllers.Api.V1;
 
 [ApiController]
 [Route("api/v1/health")]
+[Authorize]
 public class HealthController(NimPulseDbContext db) : ControllerBase
 {
     /// <summary>
-    /// Upserts a batch of HealthKit samples by ExternalId, so re-syncing the same
-    /// time range never duplicates rows.
+    /// Upserts a batch of HealthKit samples for the authenticated user by ExternalId, so
+    /// re-syncing the same time range never duplicates rows.
     /// </summary>
     [HttpPost("samples")]
     public async Task<IActionResult> UploadSamples([FromBody] UploadSamplesRequest request, CancellationToken cancellationToken)
@@ -20,9 +23,11 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
             return Ok(new UploadSamplesResponse(Received: 0, Inserted: 0, Updated: 0));
         }
 
+        var userId = HttpContext.User.RequireUserId();
+
         var externalIds = request.Samples.Select(s => s.ExternalId).ToList();
         var existing = await db.HealthSamples
-            .Where(s => externalIds.Contains(s.ExternalId))
+            .Where(s => s.UserId == userId && externalIds.Contains(s.ExternalId))
             .ToDictionaryAsync(s => s.ExternalId, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
@@ -50,6 +55,7 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
                 db.HealthSamples.Add(new HealthSample
                 {
                     Id = Guid.NewGuid(),
+                    UserId = userId,
                     ExternalId = sample.ExternalId,
                     Type = sample.Type,
                     Kind = sample.Kind,
@@ -76,9 +82,10 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
         [FromQuery] int days = 7,
         CancellationToken cancellationToken = default)
     {
+        var userId = HttpContext.User.RequireUserId();
         var since = DateTimeOffset.UtcNow.AddDays(-Math.Abs(days));
 
-        var query = db.HealthSamples.Where(s => s.StartDate >= since);
+        var query = db.HealthSamples.Where(s => s.UserId == userId && s.StartDate >= since);
         if (!string.IsNullOrWhiteSpace(type))
         {
             query = query.Where(s => s.Type == type);
@@ -95,7 +102,10 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
     [HttpGet("samples/summary")]
     public async Task<IActionResult> GetSummary(CancellationToken cancellationToken)
     {
+        var userId = HttpContext.User.RequireUserId();
+
         var summary = await db.HealthSamples
+            .Where(s => s.UserId == userId)
             .GroupBy(s => s.Type)
             .Select(g => new TypeSummary(g.Key, g.Count(), g.Max(s => s.StartDate)))
             .OrderByDescending(s => s.LatestSampleAt)
@@ -103,6 +113,65 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
 
         return Ok(summary);
     }
+
+    /// <summary>
+    /// Aggregiert Quantity-Samples eines Typs über einen Zeitraum in Buckets (Tag/Woche/Monat).
+    /// Die Basis für "verschiedene Reports" — Wochenübersicht, Monatstrend etc. sind alle derselbe
+    /// Aufruf mit anderem `period`/`days`; ein PDF-Export darauf ist ein späterer Schritt (Phase 3).
+    /// </summary>
+    [HttpGet("reports")]
+    public async Task<IActionResult> GetReport(
+        [FromQuery] string type,
+        [FromQuery] ReportPeriod period = ReportPeriod.Day,
+        [FromQuery] int days = 30,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            return BadRequest("type ist erforderlich.");
+        }
+
+        var userId = HttpContext.User.RequireUserId();
+        var since = DateTimeOffset.UtcNow.AddDays(-Math.Abs(days));
+
+        var samples = await db.HealthSamples
+            .Where(s => s.UserId == userId && s.Type == type && s.StartDate >= since && s.Value != null)
+            .Select(s => new { s.StartDate, s.Value })
+            .ToListAsync(cancellationToken);
+
+        var buckets = samples
+            .GroupBy(s => BucketStart(s.StartDate, period))
+            .Select(g => new ReportBucket(
+                BucketStart: g.Key,
+                Count: g.Count(),
+                Sum: g.Sum(s => s.Value!.Value),
+                Average: g.Average(s => s.Value!.Value),
+                Min: g.Min(s => s.Value!.Value),
+                Max: g.Max(s => s.Value!.Value)))
+            .OrderBy(b => b.BucketStart)
+            .ToList();
+
+        return Ok(new Report(type, period.ToString(), buckets));
+    }
+
+    private static DateTimeOffset BucketStart(DateTimeOffset date, ReportPeriod period)
+    {
+        var dayStart = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, date.Offset);
+        return period switch
+        {
+            ReportPeriod.Day => dayStart,
+            ReportPeriod.Week => dayStart.AddDays(-(int)date.DayOfWeek),
+            ReportPeriod.Month => new DateTimeOffset(date.Year, date.Month, 1, 0, 0, 0, date.Offset),
+            _ => dayStart,
+        };
+    }
+}
+
+public enum ReportPeriod
+{
+    Day,
+    Week,
+    Month,
 }
 
 public record UploadSamplesRequest(List<HealthSampleDto> Samples);
@@ -124,3 +193,7 @@ public record HealthSampleDto(
 public record UploadSamplesResponse(int Received, int Inserted, int Updated);
 
 public record TypeSummary(string Type, int Count, DateTimeOffset LatestSampleAt);
+
+public record ReportBucket(DateTimeOffset BucketStart, int Count, double Sum, double Average, double Min, double Max);
+
+public record Report(string Type, string Period, List<ReportBucket> Buckets);

@@ -55,101 +55,25 @@ final class HealthKitManager {
         try await healthStore.requestAuthorization(toShare: [], read: Self.clinicalRecordTypes())
     }
 
-    // MARK: - Quantity types (Körpermaße, Fitness, Vitalwerte, Ernährung, Atmung, Herz, ...)
+    // MARK: - Quantity/Category types — aus HealthKitCatalog, der einzigen Quelle der Wahrheit
+    // (dieselben Listen liest HealthDataReader zum tatsächlichen Sample-Abruf).
 
     private static func quantityTypes() -> Set<HKObjectType> {
-        var identifiers: [HKQuantityTypeIdentifier] = [
-            // Körpermaße
-            .appleSleepingWristTemperature, .bodyFatPercentage, .bodyMass, .bodyMassIndex,
-            .electrodermalActivity, .height, .leanBodyMass, .waistCircumference,
-            // Fitness
-            .activeEnergyBurned, .appleExerciseTime, .appleMoveTime, .appleStandTime,
-            .basalEnergyBurned, .cyclingCadence, .cyclingFunctionalThresholdPower,
-            .cyclingPower, .cyclingSpeed, .distanceCycling, .distanceDownhillSnowSports,
-            .distanceSwimming, .distanceWalkingRunning, .distanceWheelchair,
-            .flightsClimbed, .nikeFuel, .physicalEffort, .pushCount, .runningPower,
-            .runningSpeed, .stepCount, .swimmingStrokeCount, .underwaterDepth,
-            // Hörgesundheit
-            .environmentalAudioExposure, .environmentalSoundReduction, .headphoneAudioExposure,
-            // Herz
-            .atrialFibrillationBurden, .heartRate, .heartRateRecoveryOneMinute,
-            .heartRateVariabilitySDNN, .peripheralPerfusionIndex, .restingHeartRate,
-            .vo2Max, .walkingHeartRateAverage,
-            // Mobilität
-            .appleWalkingSteadiness, .runningGroundContactTime, .runningStrideLength,
-            .runningVerticalOscillation, .sixMinuteWalkTestDistance, .stairAscentSpeed,
-            .stairDescentSpeed, .walkingAsymmetryPercentage, .walkingDoubleSupportPercentage,
-            .walkingSpeed, .walkingStepLength,
-            // Ernährung
-            .dietaryBiotin, .dietaryCaffeine, .dietaryCalcium, .dietaryCarbohydrates,
-            .dietaryChloride, .dietaryCholesterol, .dietaryChromium, .dietaryCopper,
-            .dietaryEnergyConsumed, .dietaryFatMonounsaturated, .dietaryFatPolyunsaturated,
-            .dietaryFatSaturated, .dietaryFatTotal, .dietaryFiber, .dietaryFolate,
-            .dietaryIodine, .dietaryIron, .dietaryMagnesium, .dietaryManganese,
-            .dietaryMolybdenum, .dietaryNiacin, .dietaryPantothenicAcid, .dietaryPhosphorus,
-            .dietaryPotassium, .dietaryProtein, .dietaryRiboflavin, .dietarySelenium,
-            .dietarySodium, .dietarySugar, .dietaryThiamin, .dietaryVitaminA,
-            .dietaryVitaminB12, .dietaryVitaminB6, .dietaryVitaminC, .dietaryVitaminD,
-            .dietaryVitaminE, .dietaryVitaminK, .dietaryWater, .dietaryZinc,
-            // Sonstiges
-            .bloodAlcoholContent, .bloodPressureDiastolic, .bloodPressureSystolic,
-            .insulinDelivery, .numberOfAlcoholicBeverages, .numberOfTimesFallen,
-            .timeInDaylight, .uvExposure, .waterTemperature,
-            // Fortpflanzungsgesundheit
-            .basalBodyTemperature,
-            // Atmung
-            .forcedExpiratoryVolume1, .forcedVitalCapacity, .inhalerUsage,
-            .oxygenSaturation, .peakExpiratoryFlowRate, .respiratoryRate,
-            // Vitalwerte
-            .bloodGlucose, .bodyTemperature,
-        ]
-
+        var identifiers = HealthKitCatalog.quantitySpecs.map(\.identifier)
         if #available(iOS 18.0, *) {
-            identifiers += [
-                .crossCountrySkiingSpeed, .distanceCrossCountrySkiing, .distancePaddleSports,
-                .distanceRowing, .distanceSkatingSports, .estimatedWorkoutEffortScore,
-                .paddleSportsSpeed, .rowingSpeed, .workoutEffortScore,
-                .appleSleepingBreathingDisturbances,
-            ]
+            identifiers += HealthKitCatalog.quantitySpecsIOS18.map(\.identifier)
         }
-
         return Set(identifiers.compactMap { HKObjectType.quantityType(forIdentifier: $0) })
     }
 
-    // MARK: - Category types (Schlaf, Zyklus, Symptome, Achtsamkeit, ...)
-
     private static func categoryTypes() -> Set<HKObjectType> {
-        var identifiers: [HKCategoryTypeIdentifier] = [
-            .appleStandHour, .environmentalAudioExposureEvent, .headphoneAudioExposureEvent,
-            .highHeartRateEvent, .irregularHeartRhythmEvent, .lowCardioFitnessEvent,
-            .lowHeartRateEvent, .mindfulSession, .appleWalkingSteadinessEvent,
-            .handwashingEvent, .toothbrushingEvent,
-            // Zyklus & Fortpflanzungsgesundheit
-            .cervicalMucusQuality, .contraceptive, .infrequentMenstrualCycles,
-            .intermenstrualBleeding, .irregularMenstrualCycles, .lactation, .menstrualFlow,
-            .ovulationTestResult, .persistentIntermenstrualBleeding, .pregnancy,
-            .pregnancyTestResult, .progesteroneTestResult, .prolongedMenstrualPeriods,
-            .sexualActivity,
-            // Schlaf
-            .sleepAnalysis,
-            // Symptome
-            .abdominalCramps, .acne, .appetiteChanges, .bladderIncontinence, .bloating,
-            .breastPain, .chestTightnessOrPain, .chills, .constipation, .coughing,
-            .diarrhea, .dizziness, .drySkin, .fainting, .fatigue, .fever,
-            .generalizedBodyAche, .hairLoss, .headache, .heartburn, .hotFlashes,
-            .lossOfSmell, .lossOfTaste, .lowerBackPain, .memoryLapse, .moodChanges,
-            .nausea, .nightSweats, .pelvicPain, .rapidPoundingOrFlutteringHeartbeat,
-            .runnyNose, .shortnessOfBreath, .sinusCongestion, .skippedHeartbeat,
-            .sleepChanges, .soreThroat, .vaginalDryness, .vomiting, .wheezing,
-        ]
-
+        var identifiers = HealthKitCatalog.categorySpecs.map(\.identifier)
         if #available(iOS 18.0, *) {
-            identifiers += [.bleedingAfterPregnancy, .bleedingDuringPregnancy, .sleepApneaEvent]
+            identifiers += HealthKitCatalog.categorySpecsIOS18.map(\.identifier)
         }
         if #available(iOS 26.2, *) {
-            identifiers += [.hypertensionEvent]
+            identifiers += HealthKitCatalog.categorySpecsIOS262.map(\.identifier)
         }
-
         return Set(identifiers.compactMap { HKObjectType.categoryType(forIdentifier: $0) })
     }
 

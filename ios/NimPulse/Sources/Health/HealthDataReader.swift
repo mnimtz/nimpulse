@@ -14,36 +14,34 @@ struct HealthSampleUpload: Encodable {
     let sourceName: String?
 }
 
-/// Liest die MVP-Datentypen aus Phase 1 (Aktivität, Vitalwerte, Schlaf, Körpermaße) für einen
-/// Rückblick-Zeitraum. Bewusst eine kleine, kuratierte Teilmenge der ~180 Typen, die
-/// HealthKitManager für die Autorisierung anfragt — die Freigabe ist breit, der Sync fängt
-/// klein an und wächst mit den echten Auswertungs-Features.
+/// Liest **alle** Quantity- und Category-Typen aus `HealthKitCatalog` für einen Rückblick-
+/// Zeitraum — dieselbe Liste, für die `HealthKitManager` Lesezugriff anfragt, damit beide nie
+/// auseinanderlaufen.
+///
+/// Bewusst (noch) nicht dabei: Workouts, EKG, Audiogramm, Aktivitätsringe, Serien und
+/// Charakteristika (Geburtsdatum etc.) — das sind keine einfachen Quantity-/Category-Samples,
+/// sondern eigene Objektmodelle mit mehreren Feldern, die nicht in die aktuelle
+/// `HealthSampleUpload`-Form (ein numerischer/kategorialer Wert pro Sample) passen. Eigener
+/// Sync-Pfad für später statt sie hier schlecht reinzuquetschen.
 @available(iOS 15.0, *)
 enum HealthDataReader {
-    private struct QuantitySpec {
-        let identifier: HKQuantityTypeIdentifier
-        let typeName: String
-        let unit: HKUnit
-    }
-
-    private static let quantitySpecs: [QuantitySpec] = [
-        QuantitySpec(identifier: .stepCount, typeName: "stepCount", unit: .count()),
-        QuantitySpec(identifier: .activeEnergyBurned, typeName: "activeEnergyBurned", unit: .kilocalorie()),
-        QuantitySpec(identifier: .distanceWalkingRunning, typeName: "distanceWalkingRunning", unit: .meter()),
-        QuantitySpec(identifier: .heartRate, typeName: "heartRate", unit: HKUnit.count().unitDivided(by: .minute())),
-        QuantitySpec(identifier: .restingHeartRate, typeName: "restingHeartRate", unit: HKUnit.count().unitDivided(by: .minute())),
-        QuantitySpec(identifier: .bodyMass, typeName: "bodyMass", unit: .gramUnit(with: .kilo)),
-        QuantitySpec(identifier: .height, typeName: "height", unit: .meterUnit(with: .centi)),
-    ]
-
-    private static let categorySpecs: [(identifier: HKCategoryTypeIdentifier, typeName: String)] = [
-        (.sleepAnalysis, "sleepAnalysis"),
-    ]
-
     static func readRecentSamples(days: Int = 30) async throws -> [HealthSampleUpload] {
         let store = HKHealthStore()
         let start = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
         let predicate = HKQuery.predicateForSamples(withStart: start, end: Date())
+
+        var quantitySpecs = HealthKitCatalog.quantitySpecs
+        if #available(iOS 18.0, *) {
+            quantitySpecs += HealthKitCatalog.quantitySpecsIOS18
+        }
+
+        var categorySpecs = HealthKitCatalog.categorySpecs
+        if #available(iOS 18.0, *) {
+            categorySpecs += HealthKitCatalog.categorySpecsIOS18
+        }
+        if #available(iOS 26.2, *) {
+            categorySpecs += HealthKitCatalog.categorySpecsIOS262
+        }
 
         var uploads: [HealthSampleUpload] = []
 
@@ -52,9 +50,11 @@ enum HealthDataReader {
             let descriptor = HKSampleQueryDescriptor<HKQuantitySample>(
                 predicates: [.quantitySample(type: type, predicate: predicate)],
                 sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)],
-                limit: 500
+                limit: 1000
             )
-            let samples = try await descriptor.result(for: store)
+            // Einzelne Typen können scheitern (z. B. wenn der Nutzer den Zugriff für genau
+            // diesen Typ verweigert hat) — ein Fehlschlag soll nicht den ganzen Sync abbrechen.
+            guard let samples = try? await descriptor.result(for: store) else { continue }
             uploads += samples.map { sample in
                 HealthSampleUpload(
                     externalId: sample.uuid.uuidString,
@@ -75,9 +75,9 @@ enum HealthDataReader {
             let descriptor = HKSampleQueryDescriptor<HKCategorySample>(
                 predicates: [.categorySample(type: type, predicate: predicate)],
                 sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)],
-                limit: 500
+                limit: 1000
             )
-            let samples = try await descriptor.result(for: store)
+            guard let samples = try? await descriptor.result(for: store) else { continue }
             uploads += samples.map { sample in
                 HealthSampleUpload(
                     externalId: sample.uuid.uuidString,

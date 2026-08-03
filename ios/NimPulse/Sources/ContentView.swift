@@ -75,13 +75,22 @@ struct ContentView: View {
                 .buttonStyle(.bordered)
                 .disabled(isSyncing)
 
-                Text("Liest Schritte, aktive Kalorien, Gehen/Laufen-Distanz, Herzfrequenz, Ruheherzfrequenz, Gewicht, Größe und Schlaf der letzten 30 Tage und lädt sie zur API hoch (\(APIConfig.baseURL.absoluteString)).")
+                Text("Liest alle Quantity-/Category-HealthKit-Typen der letzten 30 Tage und lädt sie zur API hoch (\(APIConfig.baseURL.absoluteString)).")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             }
             .padding()
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
         }
     }
 
@@ -113,5 +122,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    NavigationStack { ContentView() }
 }

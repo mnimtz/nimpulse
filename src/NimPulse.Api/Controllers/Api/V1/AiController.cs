@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NimPulse.Core.Ai;
 
@@ -5,6 +6,7 @@ namespace NimPulse.Api.Controllers.Api.V1;
 
 [ApiController]
 [Route("api/v1/ai")]
+[Authorize]
 public class AiController(AiProviderResolver providerResolver) : ControllerBase
 {
     private const string SystemPrompt =
@@ -25,7 +27,7 @@ public class AiController(AiProviderResolver providerResolver) : ControllerBase
 
         try
         {
-            var provider = providerResolver.Resolve(request.Provider);
+            var provider = await providerResolver.ResolveAsync(request.Provider, cancellationToken);
             var answer = await provider.AskAsync(SystemPrompt, request.Message, cancellationToken);
             return Ok(new ChatResponse(provider.Name, answer));
         }

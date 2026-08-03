@@ -1,15 +1,13 @@
 namespace NimPulse.Core.Health;
 
-/// <summary>
-/// One HealthKit sample (quantity or category), synced from the iOS app.
-/// No UserId yet — there's no auth (Phase 2). Every sample belongs to the single
-/// implicit local user until multi-user accounts exist.
-/// </summary>
+/// <summary>One HealthKit sample (quantity or category), synced from the iOS app for a specific user.</summary>
 public class HealthSample
 {
     public Guid Id { get; set; }
 
-    /// <summary>The HealthKit sample UUID — unique per sample, used to upsert instead of duplicating on re-sync.</summary>
+    public Guid UserId { get; set; }
+
+    /// <summary>The HealthKit sample UUID — unique *per user* (not globally), used to upsert instead of duplicating on re-sync.</summary>
     public string ExternalId { get; set; } = "";
 
     /// <summary>HealthKit identifier, e.g. "stepCount", "sleepAnalysis".</summary>
