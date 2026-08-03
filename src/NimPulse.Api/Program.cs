@@ -93,7 +93,52 @@ var app = builder.Build();
 // Switch to Database.Migrate() once real user data exists that must survive schema changes.
 using (var scope = app.Services.CreateScope())
 {
-    scope.ServiceProvider.GetRequiredService<NimPulseDbContext>().Database.EnsureCreated();
+    var db = scope.ServiceProvider.GetRequiredService<NimPulseDbContext>();
+    db.Database.EnsureCreated();
+    EnsureAiGatewaySettingsColumns(db);
+}
+
+// EnsureCreated() only creates tables that don't exist yet — it never alters an existing table
+// when the model gains a column (that's what migrations are for). The three AiGatewaySettings
+// key/endpoint columns were added after the first deploy already created this table on a running
+// server, so a live database can be stuck without them ("SQLite Error 1: no such column:
+// AzureOpenAiApiKey" — reproduced against a copy of the pre-refactor schema). Additive, idempotent,
+// no data loss — safe to run on every startup regardless of which schema version is on disk.
+static void EnsureAiGatewaySettingsColumns(NimPulseDbContext db)
+{
+    var connection = db.Database.GetDbConnection();
+    connection.Open();
+    try
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var pragma = connection.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA table_info('AiGatewaySettings')";
+            using var reader = pragma.ExecuteReader();
+            var nameOrdinal = reader.GetOrdinal("name");
+            while (reader.Read())
+            {
+                existingColumns.Add(reader.GetString(nameOrdinal));
+            }
+        }
+
+        string[] requiredColumns = ["ClaudeApiKey", "AzureOpenAiEndpoint", "AzureOpenAiApiKey"];
+        foreach (var column in requiredColumns)
+        {
+            if (existingColumns.Contains(column))
+            {
+                continue;
+            }
+
+            using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE \"AiGatewaySettings\" ADD COLUMN \"{column}\" TEXT NULL";
+            alter.ExecuteNonQuery();
+        }
+    }
+    finally
+    {
+        connection.Close();
+    }
 }
 
 app.UseHttpsRedirection();

@@ -95,6 +95,10 @@ Klick den **Deploy to Azure**-Button oben. Pflichtparameter: `siteName`. AI-Prov
 
 Der EF-Core-SQLite-Provider übersetzt `Where`/`OrderBy`/`Max`/`Min` auf `DateTimeOffset`-Spalten (z. B. `HealthSample.StartDate`) server-seitig **nicht zuverlässig** — teils mit `NotSupportedException`, teils mit `InvalidOperationException: ... could not be translated`, sobald ein Vergleich mit einem weiteren Prädikat kombiniert wird. Betroffene Stellen (`ReportService`, `HealthController.GetSamples`, `AdminUsersController.List`) filtern/sortieren deshalb bewusst erst nach `ToListAsync()` clientseitig. Bei neuen Queries auf `StartDate`/`CreatedAt`/`SyncedAt` denselben Zweischritt verwenden — direkt in der DB-Query vergleichen/sortieren bricht.
 
+## Bekannte Einschränkung: EnsureCreated() migriert bestehende Tabellen nicht
+
+`Database.EnsureCreated()` legt Tabellen nur an, wenn sie noch nicht existieren — ändert eine bereits laufende Datenbank aber **nie**, wenn das Modell eine Spalte dazubekommt. Ist das schon live passiert (z. B. `AiGatewaySettings.ClaudeApiKey`/`AzureOpenAiEndpoint`/`AzureOpenAiApiKey`, nachträglich hinzugefügt, nachdem ein Server schon einmal gestartet war), fehlen diese Spalten auf dem echten Deployment — `SQLite Error 1: no such column: ...`. Für genau diesen Fall läuft beim Start jetzt ein additiver, idempotenter Nachrüst-Schritt (`EnsureAiGatewaySettingsColumns` in `Program.cs`, `ALTER TABLE ... ADD COLUMN`, keine Datenverluste). **Das ist ein Pflaster, kein Ersatz für echte EF-Core-Migrations** — jetzt, wo echte (wenn auch familiengroße) Daten auf dem Azure-Deployment liegen, sollte `EnsureCreated()` bei der nächsten größeren Schema-Änderung durch `Database.Migrate()` + eine Baseline-Migration ersetzt werden, statt für jede neue Spalte einen weiteren manuellen `ALTER TABLE`-Block zu schreiben.
+
 ## Projektstruktur
 
 ```
