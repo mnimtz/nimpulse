@@ -4,6 +4,11 @@ obj/
 .vs/
 .vscode/
 
+# lokale SQLite-DB (dotnet run erzeugt sie bei jedem Start via EnsureCreated)
+*.db
+*.db-shm
+*.db-wal
+
 # iOS / Xcode
 ios/**/*.xcodeproj/
 ios/**/xcuserdata/

@@ -41,6 +41,12 @@ targets:
         NSHealthShareUsageDescription: "NimPulse liest deine Gesundheitsdaten aus Health, um sie auszuwerten und dir verständliche Trends zu zeigen."
         NSHealthUpdateUsageDescription: "NimPulse schreibt derzeit keine Daten nach Health zurück."
         NSHealthClinicalHealthRecordsShareUsageDescription: "NimPulse liest deine Gesundheitsakte (Allergien, Medikamente, Laborwerte), um sie zusammen mit deinen anderen Health-Daten auszuwerten."
+        # Dev-only: die API läuft während der Entwicklung als reines HTTP auf einer LAN-IP
+        # (siehe Sources/Networking/APIConfig.swift) — ATS blockiert das sonst, und iOS fragt
+        # für Verbindungen ins lokale Netz separat nach Erlaubnis.
+        NSLocalNetworkUsageDescription: "NimPulse verbindet sich während der Entwicklung mit der lokal laufenden API im selben WLAN, um Health-Daten zu synchronisieren."
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: NimPulse/NimPulse.entitlements
       properties:

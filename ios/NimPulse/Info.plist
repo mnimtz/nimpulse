@@ -27,12 +27,19 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
 	<string>NimPulse liest deine Gesundheitsakte (Allergien, Medikamente, Laborwerte), um sie zusammen mit deinen anderen Health-Daten auszuwerten.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>NimPulse liest deine Gesundheitsdaten aus Health, um sie auszuwerten und dir verständliche Trends zu zeigen.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>NimPulse schreibt derzeit keine Daten nach Health zurück.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>NimPulse verbindet sich während der Entwicklung mit der lokal laufenden API im selben WLAN, um Health-Daten zu synchronisieren.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
