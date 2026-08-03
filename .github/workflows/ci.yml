@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: VERSION file must match latest git tag
+        run: |
+          if ! [ -f VERSION ]; then echo "VERSION file missing" && exit 1; fi
+          FILE=$(tr -d '[:space:]' < VERSION)
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "")
+          if [ -n "$TAG" ] && [ "$FILE" != "$TAG" ]; then
+            echo "::error::VERSION file ($FILE) does not match latest git tag ($TAG). Bump /VERSION together with tagging."
+            exit 1
+          fi
+          echo "VERSION=$FILE, latest tag=$TAG — OK"
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore NimPulse.sln
+
+      - name: Build
+        run: dotnet build NimPulse.sln --configuration Release --no-restore
