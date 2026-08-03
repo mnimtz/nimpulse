@@ -1,9 +1,14 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using NimPulse.Api.Components;
 using NimPulse.Core.Ai;
 using NimPulse.Core.Auth;
 using NimPulse.Core.Health;
@@ -18,19 +23,45 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     });
 
+// Web-Dashboard (Login/Register/Reports/Admin/KI-Gateway im Browser) — static server rendering,
+// bewusst ohne Interactive-Server-Rendermode: kein SignalR-Circuit nötig, klassische Formular-
+// Posts/Redirects reichen für dieses Admin-/Family-Scale-UI völlig.
+builder.Services.AddRazorComponents();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
+builder.Services.AddAntiforgery();
+
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
 // Scoped, not singleton — both providers read the (scoped) DbContext for the admin-configured
 // KI-Gateway settings (including the API keys — see AiGatewaySettings), not just appsettings/env.
 builder.Services.AddScoped<IAiProvider, ClaudeAiProvider>();
 builder.Services.AddScoped<IAiProvider, AzureOpenAiProvider>();
 builder.Services.AddScoped<AiProviderResolver>();
+builder.Services.AddScoped<ReportService>();
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddScoped<JwtTokenService>();
 
 var authOptions = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+
+// Zwei Auth-Schemes: Bearer/JWT für die iOS-App und andere API-Clients, Cookie fürs Browser-
+// Web-UI. "Smart" wählt anhand des Authorization-Headers, welches greift — beide teilen sich
+// dieselben Claims (siehe JwtTokenService/ClaimsPrincipalExtensions) und [Authorize]-Attribute,
+// ohne dass Controller oder Razor-Components ein Schema explizit angeben müssen.
 builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddAuthentication(options =>
+    {
+        options.DefaultScheme = "Smart";
+        options.DefaultChallengeScheme = "Smart";
+    })
+    .AddPolicyScheme("Smart", "JWT or Cookie", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+            context.Request.Headers.ContainsKey("Authorization")
+                ? JwtBearerDefaults.AuthenticationScheme
+                : CookieAuthenticationDefaults.AuthenticationScheme;
+    })
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -43,6 +74,13 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authOptions.JwtSigningKey)),
             ValidateLifetime = true,
         };
+    })
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+    {
+        options.LoginPath = "/login";
+        options.AccessDeniedPath = "/access-denied";
+        options.ExpireTimeSpan = TimeSpan.FromHours(authOptions.TokenLifetimeHours);
+        options.SlidingExpiration = true;
     });
 builder.Services.AddAuthorization();
 
@@ -59,18 +97,58 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Kein Web-Frontend — nur API + iOS-Client. Ohne diese Route liefert die nackte Site-URL
-// einen nackten 404, was beim ersten Öffnen nach dem Deploy wie ein kaputtes Deployment aussieht.
-app.MapGet("/", () => Results.Ok(new
-{
-    service = "NimPulse API",
-    status = "running",
-    version = "siehe /api/v1/version",
-}));
+app.UseAntiforgery();
 
 app.MapControllers();
+app.MapRazorComponents<App>();
+
+app.MapPost("/logout", async (HttpContext context, IAntiforgery antiforgery) =>
+{
+    try
+    {
+        await antiforgery.ValidateRequestAsync(context);
+    }
+    catch (AntiforgeryValidationException)
+    {
+        return Results.BadRequest();
+    }
+
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect("/login");
+});
+
+app.MapPost("/admin/users/{id:guid}/delete", async (Guid id, HttpContext context, NimPulseDbContext db, IAntiforgery antiforgery) =>
+{
+    if (!context.User.IsInRole("Admin"))
+    {
+        return Results.Forbid();
+    }
+
+    try
+    {
+        await antiforgery.ValidateRequestAsync(context);
+    }
+    catch (AntiforgeryValidationException)
+    {
+        return Results.BadRequest();
+    }
+
+    if (id == context.User.RequireUserId())
+    {
+        return Results.Redirect("/admin");
+    }
+
+    var user = await db.Users.FindAsync(id);
+    if (user is not null)
+    {
+        db.Users.Remove(user);
+        await db.SaveChangesAsync();
+    }
+
+    return Results.Redirect("/admin");
+}).RequireAuthorization();
 
 app.Run();

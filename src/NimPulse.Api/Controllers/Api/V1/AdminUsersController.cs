@@ -19,10 +19,13 @@ public class AdminUsersController(NimPulseDbContext db) : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
-        var users = await db.Users
+        // SQLite's EF Core provider can't order by DateTimeOffset server-side — materialize
+        // first, order client-side.
+        var all = await db.Users.ToListAsync(cancellationToken);
+        var users = all
             .OrderBy(u => u.CreatedAt)
             .Select(u => new UserSummary(u.Id, u.Email, u.DisplayName, u.Role.ToString(), u.CreatedAt))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return Ok(users);
     }

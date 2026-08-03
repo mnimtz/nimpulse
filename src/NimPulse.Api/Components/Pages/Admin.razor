@@ -1,0 +1,137 @@
+@page "/admin"
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@using NimPulse.Core.Auth
+@using NimPulse.Core.Health
+@using NimPulse.Core.Users
+@inject NimPulseDbContext Db
+
+<PageTitle>Benutzer — NimPulse</PageTitle>
+
+<h1>Benutzer</h1>
+
+<table>
+    <thead>
+        <tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Seit</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var user in users)
+        {
+            <tr>
+                <td>@user.DisplayName</td>
+                <td>@user.Email</td>
+                <td>@user.Role</td>
+                <td>@user.CreatedAt.ToLocalTime().ToString("d")</td>
+                <td>
+                    @if (user.Id != currentUserId)
+                    {
+                        <form method="post" action="/admin/users/@user.Id/delete">
+                            <AntiforgeryToken />
+                            <button type="submit">Löschen</button>
+                        </form>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h2>Neuen Benutzer anlegen</h2>
+
+<EditForm Model="Input" OnValidSubmit="HandleCreate" FormName="create-user" method="post" class="auth-form">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="field">
+        <label for="displayName">Name</label>
+        <InputText id="displayName" @bind-Value="Input.DisplayName" />
+    </div>
+    <div class="field">
+        <label for="newEmail">E-Mail</label>
+        <InputText id="newEmail" @bind-Value="Input.Email" />
+    </div>
+    <div class="field">
+        <label for="newPassword">Initial-Passwort</label>
+        <input id="newPassword" type="password" name="Input.InitialPassword" @bind="Input.InitialPassword" />
+    </div>
+    <div class="field checkbox-field">
+        <label><InputCheckbox @bind-Value="Input.IsAdmin" /> Admin</label>
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <p class="error">@errorMessage</p>
+    }
+
+    <button type="submit">Anlegen</button>
+</EditForm>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private CreateUserModel Input { get; set; } = new();
+
+    private List<User> users = new();
+    private Guid currentUserId;
+    private string? errorMessage;
+
+    private static readonly PasswordHasher<User> PasswordHasher = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentUserId = HttpContext.User.RequireUserId();
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        // SQLite's EF Core provider can't order by DateTimeOffset server-side — materialize
+        // first, order client-side.
+        var all = await Db.Users.ToListAsync();
+        users = all.OrderBy(u => u.CreatedAt).ToList();
+    }
+
+    private async Task HandleCreate()
+    {
+        var email = Input.Email.Trim().ToLowerInvariant();
+
+        if (await Db.Users.AnyAsync(u => u.Email == email))
+        {
+            errorMessage = "E-Mail-Adresse ist bereits registriert.";
+            return;
+        }
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            DisplayName = string.IsNullOrWhiteSpace(Input.DisplayName) ? email : Input.DisplayName.Trim(),
+            Role = Input.IsAdmin ? UserRole.Admin : UserRole.Member,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        user.PasswordHash = PasswordHasher.HashPassword(user, Input.InitialPassword);
+
+        Db.Users.Add(user);
+        await Db.SaveChangesAsync();
+
+        Input = new CreateUserModel();
+        await LoadUsers();
+    }
+
+    private class CreateUserModel
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required, MinLength(8)]
+        public string InitialPassword { get; set; } = "";
+
+        public string DisplayName { get; set; } = "";
+
+        public bool IsAdmin { get; set; }
+    }
+}

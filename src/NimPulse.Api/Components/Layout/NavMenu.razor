@@ -1,0 +1,40 @@
+@inject AuthenticationStateProvider AuthStateProvider
+
+<header class="nav">
+    <a class="brand" href="/">
+        <img src="img/logo.png" alt="" class="brand-logo" />
+        NimPulse
+    </a>
+    @if (isAuthenticated)
+    {
+        <nav>
+            <a href="/">Dashboard</a>
+            <a href="/reports">Berichte</a>
+            @if (isAdmin)
+            {
+                <a href="/admin">Benutzer</a>
+                <a href="/settings">KI-Gateway</a>
+            }
+        </nav>
+        <form method="post" action="/logout" class="logout-form">
+            <AntiforgeryToken />
+            <span class="user">@displayName</span>
+            <button type="submit">Abmelden</button>
+        </form>
+    }
+</header>
+
+@code {
+    private bool isAuthenticated;
+    private bool isAdmin;
+    private string displayName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = state.User;
+        isAuthenticated = user.Identity?.IsAuthenticated == true;
+        isAdmin = user.IsInRole("Admin");
+        displayName = user.Identity?.Name ?? "";
+    }
+}

@@ -1,0 +1,126 @@
+@page "/register"
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using NimPulse.Core.Health
+@using NimPulse.Core.Users
+@inject NimPulseDbContext Db
+@inject NavigationManager Navigation
+
+<PageTitle>Registrieren — NimPulse</PageTitle>
+
+<div class="auth-page">
+    <div class="auth-card">
+        <img src="img/logo.png" alt="NimPulse" class="auth-logo" />
+
+        @if (isFirstAccountHint)
+        {
+            <h1>Willkommen bei NimPulse</h1>
+            <p class="hint">Noch keine Benutzer im System — richte den ersten Account ein. Er wird automatisch Admin.</p>
+        }
+        else
+        {
+            <h1>Registrieren</h1>
+        }
+
+        <EditForm Model="Input" OnValidSubmit="HandleRegister" FormName="register" method="post" class="auth-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="field">
+                <label for="displayName">Name</label>
+                <InputText id="displayName" @bind-Value="Input.DisplayName" />
+            </div>
+            <div class="field">
+                <label for="email">E-Mail</label>
+                <InputText id="email" @bind-Value="Input.Email" autocomplete="username" />
+            </div>
+            <div class="field">
+                <label for="password">Passwort</label>
+                <input id="password" type="password" name="Input.Password" @bind="Input.Password" autocomplete="new-password" />
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <p class="error">@errorMessage</p>
+            }
+
+            <button type="submit">@(isFirstAccountHint ? "Admin-Account anlegen" : "Registrieren")</button>
+        </EditForm>
+
+        @if (!isFirstAccountHint)
+        {
+            <p class="auth-switch">Schon ein Konto? <a href="/login">Anmelden</a></p>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private RegisterModel Input { get; set; } = new();
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private string? errorMessage;
+    private bool isFirstAccountHint;
+
+    private static readonly PasswordHasher<User> PasswordHasher = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        isFirstAccountHint = !await Db.Users.AnyAsync();
+    }
+
+    private async Task HandleRegister()
+    {
+        var email = Input.Email.Trim().ToLowerInvariant();
+
+        if (await Db.Users.AnyAsync(u => u.Email == email))
+        {
+            errorMessage = "E-Mail-Adresse ist bereits registriert.";
+            return;
+        }
+
+        var isFirstUser = !await Db.Users.AnyAsync();
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            DisplayName = string.IsNullOrWhiteSpace(Input.DisplayName) ? email : Input.DisplayName.Trim(),
+            Role = isFirstUser ? UserRole.Admin : UserRole.Member,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        user.PasswordHash = PasswordHasher.HashPassword(user, Input.Password);
+
+        Db.Users.Add(user);
+        await Db.SaveChangesAsync();
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Name, user.DisplayName),
+            new(ClaimTypes.Role, user.Role.ToString()),
+        };
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    private class RegisterModel
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required, MinLength(8)]
+        public string Password { get; set; } = "";
+
+        public string DisplayName { get; set; } = "";
+    }
+}

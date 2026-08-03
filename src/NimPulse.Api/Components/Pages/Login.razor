@@ -1,0 +1,98 @@
+@page "/login"
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@using NimPulse.Core.Health
+@using NimPulse.Core.Users
+@inject NimPulseDbContext Db
+@inject NavigationManager Navigation
+
+<PageTitle>Anmelden — NimPulse</PageTitle>
+
+<div class="auth-page">
+    <div class="auth-card">
+        <img src="img/logo.png" alt="NimPulse" class="auth-logo" />
+        <h1>Anmelden</h1>
+
+        <EditForm Model="Input" OnValidSubmit="HandleLogin" FormName="login" method="post" class="auth-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="field">
+                <label for="email">E-Mail</label>
+                <InputText id="email" @bind-Value="Input.Email" autocomplete="username" />
+            </div>
+            <div class="field">
+                <label for="password">Passwort</label>
+                <input id="password" type="password" name="Input.Password" @bind="Input.Password" autocomplete="current-password" />
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <p class="error">@errorMessage</p>
+            }
+
+            <button type="submit">Anmelden</button>
+        </EditForm>
+
+        <p class="auth-switch">Noch kein Konto? <a href="/register">Registrieren</a></p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginModel Input { get; set; } = new();
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private string? errorMessage;
+
+    private static readonly PasswordHasher<User> PasswordHasher = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Frischer Deploy ohne einen einzigen Account — Login ist dann sinnlos, direkt zur
+        // Erstanlage des Admin-Accounts weiterleiten statt den Nutzer raten zu lassen.
+        if (!await Db.Users.AnyAsync())
+        {
+            Navigation.NavigateTo("/register", forceLoad: true);
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        var email = Input.Email.Trim().ToLowerInvariant();
+        var user = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+        if (user is null || PasswordHasher.VerifyHashedPassword(user, user.PasswordHash, Input.Password) == PasswordVerificationResult.Failed)
+        {
+            errorMessage = "E-Mail oder Passwort ist falsch.";
+            return;
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Name, user.DisplayName),
+            new(ClaimTypes.Role, user.Role.ToString()),
+        };
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    private class LoginModel
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        public string Password { get; set; } = "";
+    }
+}

@@ -9,7 +9,7 @@ namespace NimPulse.Api.Controllers.Api.V1;
 [ApiController]
 [Route("api/v1/health")]
 [Authorize]
-public class HealthController(NimPulseDbContext db) : ControllerBase
+public class HealthController(NimPulseDbContext db, ReportService reports) : ControllerBase
 {
     /// <summary>
     /// Upserts a batch of HealthKit samples for the authenticated user by ExternalId, so
@@ -85,16 +85,18 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
         var userId = HttpContext.User.RequireUserId();
         var since = DateTimeOffset.UtcNow.AddDays(-Math.Abs(days));
 
-        var query = db.HealthSamples.Where(s => s.UserId == userId && s.StartDate >= since);
-        if (!string.IsNullOrWhiteSpace(type))
-        {
-            query = query.Where(s => s.Type == type);
-        }
+        // Same SQLite/EF Core translation limitation as ReportService: a >= comparison on
+        // StartDate can't be combined with another predicate server-side. Only the UserId
+        // equality runs in SQL; date/type filtering and ordering happen client-side.
+        var candidates = await db.HealthSamples
+            .Where(s => s.UserId == userId)
+            .ToListAsync(cancellationToken);
 
-        var samples = await query
+        var samples = candidates
+            .Where(s => s.StartDate >= since && (string.IsNullOrWhiteSpace(type) || s.Type == type))
             .OrderByDescending(s => s.StartDate)
             .Take(1000)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return Ok(samples);
     }
@@ -103,14 +105,7 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
     public async Task<IActionResult> GetSummary(CancellationToken cancellationToken)
     {
         var userId = HttpContext.User.RequireUserId();
-
-        var summary = await db.HealthSamples
-            .Where(s => s.UserId == userId)
-            .GroupBy(s => s.Type)
-            .Select(g => new TypeSummary(g.Key, g.Count(), g.Max(s => s.StartDate)))
-            .OrderByDescending(s => s.LatestSampleAt)
-            .ToListAsync(cancellationToken);
-
+        var summary = await reports.GetTypeSummaryAsync(userId, cancellationToken);
         return Ok(summary);
     }
 
@@ -132,46 +127,10 @@ public class HealthController(NimPulseDbContext db) : ControllerBase
         }
 
         var userId = HttpContext.User.RequireUserId();
-        var since = DateTimeOffset.UtcNow.AddDays(-Math.Abs(days));
-
-        var samples = await db.HealthSamples
-            .Where(s => s.UserId == userId && s.Type == type && s.StartDate >= since && s.Value != null)
-            .Select(s => new { s.StartDate, s.Value })
-            .ToListAsync(cancellationToken);
-
-        var buckets = samples
-            .GroupBy(s => BucketStart(s.StartDate, period))
-            .Select(g => new ReportBucket(
-                BucketStart: g.Key,
-                Count: g.Count(),
-                Sum: g.Sum(s => s.Value!.Value),
-                Average: g.Average(s => s.Value!.Value),
-                Min: g.Min(s => s.Value!.Value),
-                Max: g.Max(s => s.Value!.Value)))
-            .OrderBy(b => b.BucketStart)
-            .ToList();
+        var buckets = await reports.GetBucketsAsync(userId, type, period, days, cancellationToken);
 
         return Ok(new Report(type, period.ToString(), buckets));
     }
-
-    private static DateTimeOffset BucketStart(DateTimeOffset date, ReportPeriod period)
-    {
-        var dayStart = new DateTimeOffset(date.Year, date.Month, date.Day, 0, 0, 0, date.Offset);
-        return period switch
-        {
-            ReportPeriod.Day => dayStart,
-            ReportPeriod.Week => dayStart.AddDays(-(int)date.DayOfWeek),
-            ReportPeriod.Month => new DateTimeOffset(date.Year, date.Month, 1, 0, 0, 0, date.Offset),
-            _ => dayStart,
-        };
-    }
-}
-
-public enum ReportPeriod
-{
-    Day,
-    Week,
-    Month,
 }
 
 public record UploadSamplesRequest(List<HealthSampleDto> Samples);
@@ -191,9 +150,5 @@ public record HealthSampleDto(
     string? SourceName);
 
 public record UploadSamplesResponse(int Received, int Inserted, int Updated);
-
-public record TypeSummary(string Type, int Count, DateTimeOffset LatestSampleAt);
-
-public record ReportBucket(DateTimeOffset BucketStart, int Count, double Sum, double Average, double Min, double Max);
 
 public record Report(string Type, string Period, List<ReportBucket> Buckets);

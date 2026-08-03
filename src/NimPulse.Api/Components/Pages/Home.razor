@@ -1,0 +1,51 @@
+@page "/"
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using NimPulse.Core.Auth
+@using NimPulse.Core.Health
+@inject NimPulseDbContext Db
+@inject ReportService ReportService
+
+<PageTitle>Dashboard — NimPulse</PageTitle>
+
+<h1>Dashboard</h1>
+
+@if (summary is null)
+{
+    <p>Lädt…</p>
+}
+else if (summary.Count == 0)
+{
+    <p>Noch keine Health-Daten synchronisiert. Öffne die NimPulse-iOS-App und aktiviere den Sync in den Einstellungen.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Typ</th><th>Anzahl</th><th>Letzter Wert</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var row in summary)
+            {
+                <tr>
+                    <td>@row.Type</td>
+                    <td>@row.Count</td>
+                    <td>@row.LatestSampleAt.ToLocalTime().ToString("g")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private List<TypeSummary>? summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = HttpContext.User.RequireUserId();
+        summary = await ReportService.GetTypeSummaryAsync(userId);
+    }
+}

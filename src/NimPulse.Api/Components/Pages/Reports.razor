@@ -1,0 +1,113 @@
+@page "/reports"
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using NimPulse.Core.Auth
+@using NimPulse.Core.Health
+@inject NimPulseDbContext Db
+@inject ReportService ReportService
+
+<PageTitle>Berichte — NimPulse</PageTitle>
+
+<h1>Berichte</h1>
+
+@if (availableTypes.Count == 0)
+{
+    <p>Noch keine Health-Daten synchronisiert — erst in der iOS-App synchronisieren.</p>
+}
+else
+{
+    <form method="get" class="report-filter">
+        <label>
+            Typ
+            <select name="type">
+                @foreach (var t in availableTypes)
+                {
+                    <option value="@t" selected="@(t == SelectedType)">@t</option>
+                }
+            </select>
+        </label>
+        <label>
+            Zeitraum
+            <select name="period">
+                <option value="Day" selected="@(Period == "Day")">Tag</option>
+                <option value="Week" selected="@(Period == "Week")">Woche</option>
+                <option value="Month" selected="@(Period == "Month")">Monat</option>
+            </select>
+        </label>
+        <label>
+            Tage zurück
+            <input type="number" name="days" value="@Days" min="1" max="365" />
+        </label>
+        <button type="submit">Anzeigen</button>
+    </form>
+
+    @if (buckets is not null)
+    {
+        @if (buckets.Count == 0)
+        {
+            <p>Keine Daten für <strong>@SelectedType</strong> im gewählten Zeitraum.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr><th>Zeitraum</th><th>Anzahl</th><th>Summe</th><th>Ø</th><th>Min</th><th>Max</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in buckets)
+                    {
+                        <tr>
+                            <td>@b.BucketStart.ToLocalTime().ToString("d")</td>
+                            <td>@b.Count</td>
+                            <td>@b.Sum.ToString("0.##")</td>
+                            <td>@b.Average.ToString("0.##")</td>
+                            <td>@b.Min.ToString("0.##")</td>
+                            <td>@b.Max.ToString("0.##")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+}
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? type { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? period { get; set; }
+
+    [SupplyParameterFromQuery]
+    private int? days { get; set; }
+
+    private List<string> availableTypes = new();
+    private List<ReportBucket>? buckets;
+
+    private string? SelectedType => type ?? availableTypes.FirstOrDefault();
+    private string Period => period ?? "Day";
+    private int Days => days ?? 30;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = HttpContext.User.RequireUserId();
+
+        availableTypes = await Db.HealthSamples
+            .Where(s => s.UserId == userId)
+            .Select(s => s.Type)
+            .Distinct()
+            .OrderBy(t => t)
+            .ToListAsync();
+
+        if (SelectedType is null)
+        {
+            return;
+        }
+
+        var periodEnum = Enum.TryParse<ReportPeriod>(Period, out var p) ? p : ReportPeriod.Day;
+        buckets = await ReportService.GetBucketsAsync(userId, SelectedType, periodEnum, Days);
+    }
+}
