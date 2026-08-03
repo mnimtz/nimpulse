@@ -19,10 +19,10 @@ builder.Services.AddControllers()
     });
 
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
-builder.Services.AddSingleton<IAiProvider, ClaudeAiProvider>();
-builder.Services.AddSingleton<IAiProvider, AzureOpenAiProvider>();
-// Scoped, not singleton — resolving the default provider reads the (scoped) DbContext for the
-// admin-configured KI-Gateway override.
+// Scoped, not singleton — both providers read the (scoped) DbContext for the admin-configured
+// KI-Gateway settings (including the API keys — see AiGatewaySettings), not just appsettings/env.
+builder.Services.AddScoped<IAiProvider, ClaudeAiProvider>();
+builder.Services.AddScoped<IAiProvider, AzureOpenAiProvider>();
 builder.Services.AddScoped<AiProviderResolver>();
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));

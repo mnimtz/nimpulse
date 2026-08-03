@@ -4,6 +4,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- /VERSION ist die Single Source of Truth (auch für den Git-Tag, siehe ci.yml) — hier
+         zur Build-Zeit in die Assembly gebacken statt zur Laufzeit aus einer Datei gelesen,
+         damit lokal/Docker/CI identisch funktionieren, ohne die Datei separat kopieren zu müssen. -->
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../../VERSION').Trim())</Version>
   </PropertyGroup>
 
   <ItemGroup>

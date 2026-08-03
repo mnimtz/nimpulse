@@ -6,13 +6,31 @@ struct SettingsView: View {
     @State private var aiSettings = AiGatewaySettingsDto(
         defaultProvider: "claude",
         claudeModel: "claude-sonnet-5",
-        azureOpenAiDeploymentName: ""
+        hasClaudeApiKey: false,
+        azureOpenAiDeploymentName: "",
+        azureOpenAiEndpoint: "",
+        hasAzureOpenAiApiKey: false
     )
+    @State private var claudeApiKeyInput = ""
+    @State private var azureOpenAiApiKeyInput = ""
     @State private var isLoadingAiSettings = false
     @State private var aiSettingsStatus: String?
 
+    @State private var serverVersion: String?
+
+    private var appVersion: String {
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(short) (\(build))"
+    }
+
     var body: some View {
         Form {
+            Section("Version") {
+                LabeledContent("App", value: appVersion)
+                LabeledContent("Server", value: serverVersion ?? "wird geladen…")
+            }
+
             if let user = auth.currentUser {
                 Section("Konto") {
                     LabeledContent("Name", value: user.displayName)
@@ -34,9 +52,34 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
+                    SecureField(
+                        aiSettings.hasClaudeApiKey ? "Claude API-Key (gesetzt — leer lassen zum Beibehalten)" : "Claude API-Key",
+                        text: $claudeApiKeyInput
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                    TextField(
+                        "Azure-OpenAI-Endpoint",
+                        text: Binding(
+                            get: { aiSettings.azureOpenAiEndpoint ?? "" },
+                            set: { aiSettings.azureOpenAiEndpoint = $0 }
+                        )
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+
                     TextField("Azure-OpenAI-Deployment-Name", text: $aiSettings.azureOpenAiDeploymentName)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+
+                    SecureField(
+                        aiSettings.hasAzureOpenAiApiKey ? "Azure OpenAI API-Key (gesetzt — leer lassen zum Beibehalten)" : "Azure OpenAI API-Key",
+                        text: $azureOpenAiApiKeyInput
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
 
                     Button {
                         Task { await saveAiSettings() }
@@ -65,9 +108,18 @@ struct SettingsView: View {
         }
         .navigationTitle("Einstellungen")
         .task {
+            await loadServerVersion()
             if auth.currentUser?.isAdmin == true {
                 await loadAiSettings()
             }
+        }
+    }
+
+    private func loadServerVersion() async {
+        do {
+            serverVersion = try await VersionService.get().version
+        } catch {
+            serverVersion = "nicht erreichbar"
         }
     }
 
@@ -85,7 +137,17 @@ struct SettingsView: View {
         isLoadingAiSettings = true
         defer { isLoadingAiSettings = false }
         do {
-            aiSettings = try await AiGatewaySettingsService.update(aiSettings)
+            let request = UpdateAiGatewaySettingsRequest(
+                defaultProvider: aiSettings.defaultProvider,
+                claudeModel: aiSettings.claudeModel,
+                claudeApiKey: claudeApiKeyInput.isEmpty ? nil : claudeApiKeyInput,
+                azureOpenAiDeploymentName: aiSettings.azureOpenAiDeploymentName,
+                azureOpenAiEndpoint: aiSettings.azureOpenAiEndpoint,
+                azureOpenAiApiKey: azureOpenAiApiKeyInput.isEmpty ? nil : azureOpenAiApiKeyInput
+            )
+            aiSettings = try await AiGatewaySettingsService.update(request)
+            claudeApiKeyInput = ""
+            azureOpenAiApiKeyInput = ""
             aiSettingsStatus = "Gespeichert."
         } catch {
             aiSettingsStatus = "Speichern fehlgeschlagen: \(error.localizedDescription)"

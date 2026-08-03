@@ -2,7 +2,7 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
-    "description": "NimPulse — self-hosted family health platform. Provisions a Linux App Service Web App running the container from GHCR, a storage account with a File share mounted at /data for the SQLite metadata database, and a Blob container for generated reports. AI keys (Claude, Azure OpenAI) are stored as App Service settings."
+    "description": "NimPulse — self-hosted family health platform. Provisions a Linux App Service Web App running the container from GHCR, a storage account with a File share mounted at /data for the SQLite metadata database, and a Blob container for generated reports. AI provider/keys are NOT configured here — set them once after first login via the app's own Admin Settings (KI-Gateway), not at infra-provisioning time."
   },
   "parameters": {
     "siteName": {
@@ -30,7 +30,7 @@
       "type": "string",
       "defaultValue": "ghcr.io/mnimtz/nimpulse:latest",
       "metadata": {
-        "description": "Container image. Use a versioned tag (e.g. ghcr.io/mnimtz/nimpulse:0.1.0) for reproducible deployments."
+        "description": "Container image. Use a versioned tag (e.g. ghcr.io/mnimtz/nimpulse:0.2.0) for reproducible deployments."
       }
     },
     "tz": {
@@ -46,34 +46,6 @@
       "allowedValues": [ "de", "en" ],
       "metadata": {
         "description": "Fallback UI language when the visitor's browser preference cannot be resolved. This project ships DE+EN only."
-      }
-    },
-    "anthropicApiKey": {
-      "type": "securestring",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Claude API key (console.anthropic.com). Leave empty and set it later in the App Service Configuration blade if you'd rather not paste secrets into the ARM deployment form."
-      }
-    },
-    "azureOpenAiEndpoint": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Azure OpenAI resource endpoint, e.g. https://<resource>.openai.azure.com/ — only needed if you want the GPT-5.6 second opinion alongside Claude."
-      }
-    },
-    "azureOpenAiApiKey": {
-      "type": "securestring",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Azure OpenAI API key. Leave empty if you're only using Claude for now."
-      }
-    },
-    "azureOpenAiDeploymentName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "The deployment name you gave the GPT-5.6 model in the Azure OpenAI resource — not a raw OpenAI model ID."
       }
     },
     "jwtSigningKey": {
@@ -188,13 +160,7 @@
             { "name": "Localization__DefaultCulture", "value": "[parameters('defaultLang')]" },
             { "name": "Localization__SupportedCultures", "value": "de,en" },
             { "name": "TZ", "value": "[parameters('tz')]" },
-            { "name": "Auth__JwtSigningKey", "value": "[variables('jwtSigningKey')]" },
-            { "name": "Ai__DefaultProvider", "value": "claude" },
-            { "name": "Ai__Claude__ApiKey", "value": "[parameters('anthropicApiKey')]" },
-            { "name": "Ai__Claude__Model", "value": "claude-sonnet-5" },
-            { "name": "Ai__AzureOpenAi__Endpoint", "value": "[parameters('azureOpenAiEndpoint')]" },
-            { "name": "Ai__AzureOpenAi__ApiKey", "value": "[parameters('azureOpenAiApiKey')]" },
-            { "name": "Ai__AzureOpenAi__DeploymentName", "value": "[parameters('azureOpenAiDeploymentName')]" }
+            { "name": "Auth__JwtSigningKey", "value": "[variables('jwtSigningKey')]" }
           ],
           "azureStorageAccounts": {
             "data": {
@@ -234,7 +200,7 @@
     },
     "nextSteps": {
       "type": "string",
-      "value": "Open the site URL. If you left the AI keys empty, set Ai__Claude__ApiKey (and optionally Ai__AzureOpenAi__*) in the App Service Configuration blade, then restart the app. SQLite on Azure Files is fine for a family — migrate to Azure SQL only if you outgrow it (see the concept doc, Phase 4)."
+      "value": "Open the site URL, register the first account (becomes Admin automatically), then set up Claude/Azure OpenAI under Settings → KI-Gateway in the app — API keys are configured there, not during deployment. SQLite on Azure Files is fine for a family — migrate to Azure SQL only if you outgrow it (see the concept doc, Phase 4)."
     }
   }
 }
