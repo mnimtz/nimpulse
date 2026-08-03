@@ -1,12 +1,21 @@
 import Foundation
 
-/// Dev-only config. Kein Login/Account-System bisher (Phase 2), also auch keine per-User-URL —
-/// nur die Adresse, unter der `dotnet run --project src/NimPulse.Api` gerade erreichbar ist.
-///
-/// Lokal auf dem Mac testen, App auf echtem iPhone im selben WLAN:
-///   ASPNETCORE_URLS="http://0.0.0.0:5289" dotnet run --project src/NimPulse.Api
-/// (0.0.0.0 binden, sonst ist der Server nur vom Mac selbst erreichbar — 127.0.0.1 reicht nicht.)
-/// Dann hier die LAN-IP des Macs eintragen (`ipconfig getifaddr en0`).
+/// Server-Adresse — nutzerkonfigurierbar über ein Feld auf dem Login-Screen, nicht mehr fest im
+/// Code verdrahtet. Default ist die echte Azure-Deployment-URL; lokale Entwicklung (LAN-IP des
+/// Macs) überschreibt das Feld temporär und wird per UserDefaults gemerkt.
 enum APIConfig {
-    static let baseURL = URL(string: "http://192.168.1.155:5289")!
+    private static let userDefaultsKey = "NimPulse.ServerURL"
+    static let defaultURLString = "https://nimpulse.azurewebsites.net"
+
+    static var baseURLString: String {
+        get { UserDefaults.standard.string(forKey: userDefaultsKey) ?? defaultURLString }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            UserDefaults.standard.set(trimmed.isEmpty ? nil : trimmed, forKey: userDefaultsKey)
+        }
+    }
+
+    static var baseURL: URL {
+        URL(string: baseURLString) ?? URL(string: defaultURLString)!
+    }
 }

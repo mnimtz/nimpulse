@@ -9,6 +9,7 @@ struct LoginView: View {
     @State private var isRegistering = false
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var serverURL = APIConfig.baseURLString
 
     var body: some View {
         VStack(spacing: 16) {
@@ -64,6 +65,23 @@ struct LoginView: View {
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
             }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Server")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                TextField(APIConfig.defaultURLString, text: $serverURL)
+                    .font(.caption)
+                    .textContentType(.URL)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: serverURL) { _, newValue in
+                        APIConfig.baseURLString = newValue
+                    }
+            }
+            .padding(.top, 8)
         }
         .padding(32)
     }
