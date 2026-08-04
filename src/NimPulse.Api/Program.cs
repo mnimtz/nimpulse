@@ -40,6 +40,8 @@ builder.Services.AddScoped<IAiProvider, AzureOpenAiProvider>();
 builder.Services.AddScoped<IAiProvider, OpenAiProvider>();
 builder.Services.AddScoped<AiProviderResolver>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<AiModelListingService>();
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddScoped<JwtTokenService>();

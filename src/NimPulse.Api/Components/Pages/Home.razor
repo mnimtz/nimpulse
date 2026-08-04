@@ -10,42 +10,136 @@
 
 <h1>Dashboard</h1>
 
-@if (summary is null)
+@if (!isLoaded)
 {
     <p>Lädt…</p>
 }
-else if (summary.Count == 0)
+else if (!hasAnyData)
 {
-    <p>Noch keine Health-Daten synchronisiert. Öffne die NimPulse-iOS-App und aktiviere den Sync in den Einstellungen.</p>
+    <div class="empty-state">
+        <p>Noch keine Health-Daten synchronisiert.</p>
+        <p class="hint">Öffne die NimPulse-iOS-App und aktiviere den Sync in den Einstellungen.</p>
+    </div>
 }
 else
 {
-    <table>
-        <thead>
-            <tr><th>Typ</th><th>Anzahl</th><th>Letzter Wert</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var row in summary)
+    @if (headlineCards.Count > 0)
+    {
+        <div class="stat-cards">
+            @foreach (var card in headlineCards)
             {
-                <tr>
-                    <td>@HealthTypeCatalog.GetDisplayName(row.Type)</td>
-                    <td>@row.Count</td>
-                    <td>@row.LatestSampleAt.ToLocalTime().ToString("g")</td>
-                </tr>
+                <div class="stat-card">
+                    <div class="stat-card-label">@card.Label</div>
+                    <div class="stat-card-value">@card.Value</div>
+                    <div class="stat-card-sub">@card.Sub</div>
+                </div>
             }
-        </tbody>
-    </table>
+        </div>
+    }
+
+    @if (stepChartBuckets is { Count: > 0 })
+    {
+        <div class="card">
+            <h2>Schritte — letzte 7 Tage</h2>
+            <div class="bar-chart">
+                @foreach (var b in stepChartBuckets)
+                {
+                    var heightPct = stepChartMax > 0 ? (b.Sum / stepChartMax * 100) : 0;
+                    <div class="bar-chart-column">
+                        <div class="bar-chart-bar" style="height: @(heightPct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%" title="@b.Sum.ToString("0") Schritte"></div>
+                        <div class="bar-chart-label">@b.BucketStart.ToLocalTime().ToString("ddd")</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (otherTypes.Count > 0)
+    {
+        <div class="card">
+            <h2>Weitere synchronisierte Werte</h2>
+            <div class="model-list">
+                @foreach (var type in otherTypes)
+                {
+                    <a class="model-suggestion" href="@("/reports?type=" + Uri.EscapeDataString(type))">@HealthTypeCatalog.GetDisplayName(type)</a>
+                }
+            </div>
+        </div>
+    }
 }
 
 @code {
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
-    private List<TypeSummary>? summary;
+    private bool isLoaded;
+    private bool hasAnyData;
+    private List<HeadlineCard> headlineCards = new();
+    private List<ReportBucket>? stepChartBuckets;
+    private double stepChartMax;
+    private List<string> otherTypes = new();
+
+    // Kuratierte Reihenfolge für die Kopf-Kacheln — nicht jeder Typ verdient eine Kachel, das wäre
+    // wieder die rohe Tabelle nur in Kartenform. Alles andere landet unten als Link zu /reports.
+    private static readonly (string Type, string Label, string Unit)[] HeadlineTypes =
+    [
+        ("stepCount", "Schritte", ""),
+        ("activeEnergyBurned", "Aktive Energie", "kcal"),
+        ("heartRate", "Herzfrequenz (Ø)", "bpm"),
+        ("restingHeartRate", "Ruhepuls", "bpm"),
+    ];
 
     protected override async Task OnInitializedAsync()
     {
         var userId = HttpContext.User.RequireUserId();
-        summary = await ReportService.GetTypeSummaryAsync(userId);
+        var summary = await ReportService.GetTypeSummaryAsync(userId);
+        hasAnyData = summary.Count > 0;
+
+        if (!hasAnyData)
+        {
+            isLoaded = true;
+            return;
+        }
+
+        var availableTypes = summary.Select(s => s.Type).ToHashSet();
+
+        foreach (var (type, label, unit) in HeadlineTypes)
+        {
+            if (!availableTypes.Contains(type))
+            {
+                continue;
+            }
+
+            var buckets = await ReportService.GetBucketsAsync(userId, type, ReportPeriod.Day, 7);
+            if (buckets.Count == 0)
+            {
+                continue;
+            }
+
+            var latest = buckets.OrderByDescending(b => b.BucketStart).First();
+            var isToday = latest.BucketStart.ToLocalTime().Date == DateTimeOffset.Now.Date;
+            var label2 = isToday ? label : $"{label} ({latest.BucketStart.ToLocalTime():dd.MM.})";
+
+            // Herzfrequenz ist ein Durchschnittswert über den Tag sinnvoll, alles andere (Schritte,
+            // Energie) eine Tagessumme.
+            var isAverageMetric = type is "heartRate" or "restingHeartRate";
+            var value = isAverageMetric ? latest.Average : latest.Sum;
+            var sub = isAverageMetric ? $"Min {latest.Min:0} · Max {latest.Max:0}" : "";
+
+            headlineCards.Add(new HeadlineCard(label2, $"{value:0}{(string.IsNullOrEmpty(unit) ? "" : " " + unit)}", sub));
+
+            if (type == "stepCount")
+            {
+                stepChartBuckets = buckets;
+                stepChartMax = buckets.Max(b => b.Sum);
+            }
+        }
+
+        var headlineTypeNames = HeadlineTypes.Select(h => h.Type).ToHashSet();
+        otherTypes = availableTypes.Where(t => !headlineTypeNames.Contains(t)).OrderBy(t => t).ToList();
+
+        isLoaded = true;
     }
+
+    private record HeadlineCard(string Label, string Value, string Sub);
 }

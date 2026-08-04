@@ -13,44 +13,79 @@
 
 <EditForm Model="Input" OnValidSubmit="HandleSave" FormName="ai-settings" method="post" class="auth-form">
     <div class="field">
-        <label for="provider">Standard-Provider</label>
-        @* Rohes <select> statt <InputSelect> — siehe Kommentar in Settings.razor: InputSelect
-           schreibt den Wert in Static-SSR nur als (ungültiges) "value"-Attribut auf <select>, das
-           echte Browser ohne Interactivity ignorieren. Explizites "selected" pro Option ist der
-           zuverlässige Weg. *@
-        <select id="provider" name="Input.DefaultProvider">
-            <option value="claude" selected="@(Input.DefaultProvider == "claude")">Claude</option>
-            <option value="azure-openai" selected="@(Input.DefaultProvider == "azure-openai")">Azure OpenAI</option>
-            <option value="openai" selected="@(Input.DefaultProvider == "openai")">OpenAI</option>
-        </select>
+        <label>Standard-Provider</label>
+        @* Radio-Karten statt <select> — zeigt sofort per CSS (:has(:checked)), welcher Provider
+           aktiv ist, und schaltet per kleinem JS-Handler (nimShowProvider) nur dessen Felder sichtbar,
+           statt alle drei Provider-Formulare gleichzeitig untereinander zu zeigen. *@
+        <div class="provider-picker">
+            <label>
+                <input type="radio" name="Input.DefaultProvider" value="claude" onchange="nimShowProvider('claude')" checked="@(Input.DefaultProvider == "claude")" />
+                <span>Claude</span>
+            </label>
+            <label>
+                <input type="radio" name="Input.DefaultProvider" value="azure-openai" onchange="nimShowProvider('azure-openai')" checked="@(Input.DefaultProvider == "azure-openai")" />
+                <span>Azure OpenAI</span>
+            </label>
+            <label>
+                <input type="radio" name="Input.DefaultProvider" value="openai" onchange="nimShowProvider('openai')" checked="@(Input.DefaultProvider == "openai")" />
+                <span>OpenAI</span>
+            </label>
+        </div>
     </div>
-    <div class="field">
-        <label for="claudeModel">Claude-Modell</label>
-        <InputText id="claudeModel" @bind-Value="Input.ClaudeModel" />
+
+    <div id="fields-claude" class="provider-fields @(Input.DefaultProvider == "claude" ? "active" : "")">
+        <div class="field">
+            <label for="claudeModel">Claude-Modell</label>
+            <InputText id="claudeModel" @bind-Value="Input.ClaudeModel" placeholder="z. B. claude-sonnet-5" />
+            <p class="field-hint">Empfehlung: claude-sonnet-5</p>
+        </div>
+        <div class="field">
+            <label for="claudeKey">Claude API-Key @(hasClaudeKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
+            <input id="claudeKey" type="password" name="Input.ClaudeApiKey" @bind="Input.ClaudeApiKey" autocomplete="off" />
+        </div>
+        <div class="field">
+            <button type="button" class="secondary" onclick="nimLoadModels('claude', 'claudeKey', null, 'claudeModel', 'claudeModelStatus', 'claudeModelList')">Modelle laden</button>
+            <div id="claudeModelStatus" class="status"></div>
+            <div id="claudeModelList" class="model-list"></div>
+        </div>
     </div>
-    <div class="field">
-        <label for="claudeKey">Claude API-Key @(hasClaudeKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
-        <input id="claudeKey" type="password" name="Input.ClaudeApiKey" @bind="Input.ClaudeApiKey" autocomplete="off" />
+
+    <div id="fields-azure-openai" class="provider-fields @(Input.DefaultProvider == "azure-openai" ? "active" : "")">
+        <div class="field">
+            <label for="azureEndpoint">Azure-OpenAI-Endpoint</label>
+            <InputText id="azureEndpoint" @bind-Value="Input.AzureOpenAiEndpoint" placeholder="https://<resource>.openai.azure.com/" />
+        </div>
+        <div class="field">
+            <label for="azureKey">Azure OpenAI API-Key @(hasAzureKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
+            <input id="azureKey" type="password" name="Input.AzureOpenAiApiKey" @bind="Input.AzureOpenAiApiKey" autocomplete="off" />
+        </div>
+        <div class="field">
+            <button type="button" class="secondary" onclick="nimLoadModels('azure-openai', 'azureKey', 'azureEndpoint', 'azureDeployment', 'azureModelStatus', 'azureModelList')">Deployments laden</button>
+            <div id="azureModelStatus" class="status"></div>
+            <div id="azureModelList" class="model-list"></div>
+        </div>
+        <div class="field">
+            <label for="azureDeployment">Azure-OpenAI-Deployment-Name</label>
+            <InputText id="azureDeployment" @bind-Value="Input.AzureOpenAiDeploymentName" />
+            <p class="field-hint">Der Name, den du beim Deployment in Azure vergeben hast — oder oben "Deployments laden" nutzen.</p>
+        </div>
     </div>
-    <div class="field">
-        <label for="azureEndpoint">Azure-OpenAI-Endpoint</label>
-        <InputText id="azureEndpoint" @bind-Value="Input.AzureOpenAiEndpoint" />
-    </div>
-    <div class="field">
-        <label for="azureDeployment">Azure-OpenAI-Deployment-Name</label>
-        <InputText id="azureDeployment" @bind-Value="Input.AzureOpenAiDeploymentName" />
-    </div>
-    <div class="field">
-        <label for="azureKey">Azure OpenAI API-Key @(hasAzureKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
-        <input id="azureKey" type="password" name="Input.AzureOpenAiApiKey" @bind="Input.AzureOpenAiApiKey" autocomplete="off" />
-    </div>
-    <div class="field">
-        <label for="openAiModel">OpenAI-Modell</label>
-        <InputText id="openAiModel" @bind-Value="Input.OpenAiModel" placeholder="z. B. gpt-5" />
-    </div>
-    <div class="field">
-        <label for="openAiKey">OpenAI API-Key @(hasOpenAiKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
-        <input id="openAiKey" type="password" name="Input.OpenAiApiKey" @bind="Input.OpenAiApiKey" autocomplete="off" />
+
+    <div id="fields-openai" class="provider-fields @(Input.DefaultProvider == "openai" ? "active" : "")">
+        <div class="field">
+            <label for="openAiModel">OpenAI-Modell</label>
+            <InputText id="openAiModel" @bind-Value="Input.OpenAiModel" placeholder="z. B. gpt-5.6" />
+            <p class="field-hint">Empfehlung: gpt-5.6</p>
+        </div>
+        <div class="field">
+            <label for="openAiKey">OpenAI API-Key @(hasOpenAiKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
+            <input id="openAiKey" type="password" name="Input.OpenAiApiKey" @bind="Input.OpenAiApiKey" autocomplete="off" />
+        </div>
+        <div class="field">
+            <button type="button" class="secondary" onclick="nimLoadModels('openai', 'openAiKey', null, 'openAiModel', 'openAiModelStatus', 'openAiModelList')">Modelle laden</button>
+            <div id="openAiModelStatus" class="status"></div>
+            <div id="openAiModelList" class="model-list"></div>
+        </div>
     </div>
 
     @if (statusMessage is not null)
@@ -60,6 +95,73 @@
 
     <button type="submit">Speichern</button>
 </EditForm>
+
+@* Bewusst reines Vanilla-JS statt Interactive-Rendermode: die Seite ist sonst komplett statisch
+   (kein SignalR-Circuit), und für Provider-Umschalten + einen "Modelle laden"-Button lohnt sich der
+   Umbau der ganzen Seite auf Interactivity nicht. Keys/Endpoint werden nur zur Live-Abfrage an die
+   Provider-API durchgereicht, nie zwischengespeichert. *@
+<script>
+    function nimShowProvider(provider) {
+        document.querySelectorAll('.provider-fields').forEach(function (el) {
+            el.classList.toggle('active', el.id === 'fields-' + provider);
+        });
+    }
+
+    async function nimLoadModels(provider, keyFieldId, endpointFieldId, modelFieldId, statusId, listId) {
+        const statusEl = document.getElementById(statusId);
+        const listEl = document.getElementById(listId);
+        const apiKey = document.getElementById(keyFieldId).value;
+
+        listEl.innerHTML = '';
+
+        if (!apiKey) {
+            statusEl.textContent = 'Bitte zuerst einen API-Key eingeben.';
+            return;
+        }
+
+        const endpoint = endpointFieldId ? document.getElementById(endpointFieldId).value : null;
+        if (endpointFieldId && !endpoint) {
+            statusEl.textContent = 'Bitte zuerst den Endpoint eingeben.';
+            return;
+        }
+
+        statusEl.textContent = 'Lädt…';
+
+        try {
+            const response = await fetch('/api/v1/settings/ai/models', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider: provider, apiKey: apiKey, endpoint: endpoint })
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                statusEl.textContent = 'Fehler: ' + (err.error || response.status);
+                return;
+            }
+
+            const models = await response.json();
+            if (models.length === 0) {
+                statusEl.textContent = 'Keine Modelle gefunden.';
+                return;
+            }
+            statusEl.textContent = models.length + ' gefunden — anklicken zum Übernehmen:';
+
+            models.forEach(function (m) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = m.id;
+                btn.className = 'model-suggestion';
+                btn.onclick = function () {
+                    document.getElementById(modelFieldId).value = m.id;
+                };
+                listEl.appendChild(btn);
+            });
+        } catch (e) {
+            statusEl.textContent = 'Fehler: ' + e.message;
+        }
+    }
+</script>
 
 @code {
     [CascadingParameter]

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using NimPulse.Core.Ai;
 using NimPulse.Core.Health;
 using NimPulse.Core.Settings;
 
@@ -14,7 +15,7 @@ namespace NimPulse.Api.Controllers.Api.V1;
 [ApiController]
 [Route("api/v1/settings/ai")]
 [Authorize(Roles = "Admin")]
-public class AiSettingsController(NimPulseDbContext db) : ControllerBase
+public class AiSettingsController(NimPulseDbContext db, AiModelListingService modelListingService) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
@@ -60,6 +61,29 @@ public class AiSettingsController(NimPulseDbContext db) : ControllerBase
         return Ok(ToView(settings));
     }
 
+    /// <summary>
+    /// Live-Modell-Liste direkt bei der Provider-API, mit dem gerade eingetippten (noch nicht
+    /// gespeicherten) Key — POST statt Query-Param, damit der Key nicht in Server-/Proxy-Logs landet.
+    /// </summary>
+    [HttpPost("models")]
+    public async Task<IActionResult> ListModels([FromBody] ListModelsRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.ApiKey))
+        {
+            return BadRequest(new { error = "API-Key erforderlich." });
+        }
+
+        try
+        {
+            var models = await modelListingService.ListModelsAsync(request.Provider, request.ApiKey, request.Endpoint, cancellationToken);
+            return Ok(models);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or HttpRequestException)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     private static AiGatewaySettingsView ToView(AiGatewaySettings settings) => new(
         DefaultProvider: settings.DefaultProvider,
         ClaudeModel: settings.ClaudeModel,
@@ -92,3 +116,5 @@ public record UpdateAiGatewaySettingsRequest(
     string? AzureOpenAiApiKey,
     string OpenAiModel,
     string? OpenAiApiKey);
+
+public record ListModelsRequest(string Provider, string ApiKey, string? Endpoint);

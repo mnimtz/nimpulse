@@ -45,29 +45,42 @@ else
     {
         @if (buckets.Count == 0)
         {
-            <p>Keine Daten für <strong>@HealthTypeCatalog.GetDisplayName(SelectedType!)</strong> im gewählten Zeitraum.</p>
+            <div class="empty-state">Keine Daten für <strong>@HealthTypeCatalog.GetDisplayName(SelectedType!)</strong> im gewählten Zeitraum.</div>
         }
         else
         {
-            <h2>@HealthTypeCatalog.GetDisplayName(SelectedType!)</h2>
-            <table>
-                <thead>
-                    <tr><th>Zeitraum</th><th>Anzahl</th><th>Summe</th><th>Ø</th><th>Min</th><th>Max</th></tr>
-                </thead>
-                <tbody>
+            <div class="card">
+                <h2>@HealthTypeCatalog.GetDisplayName(SelectedType!)</h2>
+                @{ var chartMax = buckets.Max(b => b.Sum); }
+                <div class="bar-chart">
                     @foreach (var b in buckets)
                     {
-                        <tr>
-                            <td>@b.BucketStart.ToLocalTime().ToString("d")</td>
-                            <td>@b.Count</td>
-                            <td>@b.Sum.ToString("0.##")</td>
-                            <td>@b.Average.ToString("0.##")</td>
-                            <td>@b.Min.ToString("0.##")</td>
-                            <td>@b.Max.ToString("0.##")</td>
-                        </tr>
+                        var heightPct = chartMax > 0 ? (b.Sum / chartMax * 100) : 0;
+                        <div class="bar-chart-column">
+                            <div class="bar-chart-bar" style="height: @(heightPct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%" title="@b.Sum.ToString("0.##")"></div>
+                            <div class="bar-chart-label">@b.BucketStart.ToLocalTime().ToString(Period == "Day" ? "dd.MM" : "dd.MM")</div>
+                        </div>
                     }
-                </tbody>
-            </table>
+                </div>
+                <table>
+                    <thead>
+                        <tr><th>Zeitraum</th><th>Anzahl</th><th>Summe</th><th>Ø</th><th>Min</th><th>Max</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in buckets)
+                        {
+                            <tr>
+                                <td>@b.BucketStart.ToLocalTime().ToString("d")</td>
+                                <td>@b.Count</td>
+                                <td>@b.Sum.ToString("0.##")</td>
+                                <td>@b.Average.ToString("0.##")</td>
+                                <td>@b.Min.ToString("0.##")</td>
+                                <td>@b.Max.ToString("0.##")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         }
     }
 }

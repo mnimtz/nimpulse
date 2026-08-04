@@ -1,12 +1,17 @@
 :root {
-    --nim-bg: #f4f7f7;
+    --nim-bg: #f2f6f5;
     --nim-surface: #ffffff;
-    --nim-text: #1c2b2a;
-    --nim-muted: #5c6f6d;
-    --nim-border: #dbe4e2;
+    --nim-surface-alt: #eef4f3;
+    --nim-text: #16241f;
+    --nim-muted: #5f7570;
+    --nim-border: #dde6e3;
     --nim-accent: #0f766e;
+    --nim-accent-soft: #e3f3f0;
     --nim-accent-hover: #0b5e58;
-    --nim-danger: #b3261e;
+    --nim-danger: #c0392b;
+    --nim-danger-soft: #fbeaea;
+    --shadow-sm: 0 1px 2px rgba(16, 40, 34, 0.06);
+    --shadow-md: 0 8px 24px rgba(16, 40, 34, 0.08);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -22,13 +27,17 @@ body {
 }
 
 h1 {
-    font-size: 1.6rem;
-    margin: 0 0 1rem;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.25rem;
 }
 
 h2 {
-    font-size: 1.2rem;
-    margin: 2rem 0 0.75rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--nim-text);
+    margin: 0 0 0.9rem;
 }
 
 a {
@@ -51,6 +60,9 @@ a:hover {
     padding: 0.75rem 1.5rem;
     background: var(--nim-surface);
     border-bottom: 1px solid var(--nim-border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .nav .brand {
@@ -70,12 +82,22 @@ a:hover {
 
 .nav nav {
     display: flex;
-    gap: 1.25rem;
+    gap: 0.25rem;
     flex: 1;
 }
 
 .nav nav a {
+    color: var(--nim-muted);
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 0.4rem 0.7rem;
+    border-radius: 6px;
+}
+
+.nav nav a:hover {
     color: var(--nim-text);
+    background: var(--nim-surface-alt);
+    text-decoration: none;
 }
 
 .logout-form {
@@ -91,37 +113,132 @@ a:hover {
 }
 
 main .content {
-    max-width: 960px;
+    max-width: 1000px;
     margin: 0 auto;
-    padding: 2rem 1.5rem;
+    padding: 2rem 1.5rem 4rem;
 }
+
+/* ---- Cards (generic container used throughout) ---- */
+
+.card {
+    background: var(--nim-surface);
+    border: 1px solid var(--nim-border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* ---- Dashboard stat cards ---- */
+
+.stat-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--nim-surface);
+    border: 1px solid var(--nim-border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    padding: 1.25rem;
+}
+
+.stat-card-label {
+    font-size: 0.82rem;
+    color: var(--nim-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.stat-card-value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    color: var(--nim-text);
+    margin-top: 0.3rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-card-sub {
+    font-size: 0.85rem;
+    color: var(--nim-muted);
+    margin-top: 0.25rem;
+    min-height: 1.2em;
+}
+
+/* ---- Bar chart (Dashboard trends) ---- */
+
+.bar-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    height: 160px;
+    padding: 1rem 0.5rem 0;
+}
+
+.bar-chart-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.bar-chart-bar {
+    width: 100%;
+    max-width: 36px;
+    background: linear-gradient(180deg, var(--nim-accent) 0%, #34a396 100%);
+    border-radius: 6px 6px 2px 2px;
+    min-height: 3px;
+    transition: opacity 0.15s;
+}
+
+.bar-chart-bar:hover {
+    opacity: 0.8;
+}
+
+.bar-chart-label {
+    font-size: 0.78rem;
+    color: var(--nim-muted);
+}
+
+/* ---- Tables ---- */
 
 table {
     width: 100%;
     border-collapse: collapse;
     background: var(--nim-surface);
     border: 1px solid var(--nim-border);
-    border-radius: 8px;
+    border-radius: 12px;
     overflow: hidden;
-    margin-bottom: 1.5rem;
 }
 
 th, td {
     text-align: left;
-    padding: 0.6rem 0.9rem;
+    padding: 0.65rem 1rem;
     border-bottom: 1px solid var(--nim-border);
-    font-size: 0.95rem;
+    font-size: 0.92rem;
 }
 
 th {
-    background: #eef3f2;
+    background: var(--nim-surface-alt);
     color: var(--nim-muted);
     font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
 tr:last-child td {
     border-bottom: none;
 }
+
+/* ---- Auth pages ---- */
 
 .auth-page {
     min-height: calc(100vh - 57px);
@@ -148,7 +265,7 @@ tr:last-child td {
     width: 72px;
     height: 72px;
     border-radius: 18px;
-    box-shadow: 0 4px 16px rgba(15, 118, 110, 0.25);
+    box-shadow: var(--shadow-md);
     margin-bottom: 0.5rem;
 }
 
@@ -158,16 +275,19 @@ tr:last-child td {
     color: var(--nim-muted);
 }
 
+/* ---- Forms ---- */
+
 .auth-form, .report-filter {
     background: var(--nim-surface);
     border: 1px solid var(--nim-border);
-    border-radius: 8px;
-    padding: 1.25rem;
-    max-width: 420px;
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    padding: 1.5rem;
+    max-width: 440px;
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
+    gap: 1.1rem;
     text-align: left;
 }
 
@@ -182,7 +302,7 @@ tr:last-child td {
 .field {
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
+    gap: 0.35rem;
 }
 
 .field.checkbox-field {
@@ -191,32 +311,55 @@ tr:last-child td {
 }
 
 label {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--nim-muted);
+    font-weight: 600;
 }
 
-input[type="text"], input[type="email"], input[type="password"], input[type="number"], select {
-    padding: 0.5rem 0.6rem;
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="url"], select {
+    padding: 0.6rem 0.7rem;
     border: 1px solid var(--nim-border);
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 0.95rem;
     background: var(--nim-bg);
     color: var(--nim-text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--nim-accent);
+    box-shadow: 0 0 0 3px var(--nim-accent-soft);
 }
 
 button {
     background: var(--nim-accent);
     color: white;
     border: none;
-    border-radius: 6px;
-    padding: 0.55rem 1.1rem;
+    border-radius: 8px;
+    padding: 0.6rem 1.2rem;
     font-size: 0.95rem;
+    font-weight: 600;
     cursor: pointer;
     align-self: flex-start;
+    transition: background 0.15s, transform 0.05s;
 }
 
 button:hover {
     background: var(--nim-accent-hover);
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+button.secondary {
+    background: var(--nim-surface-alt);
+    color: var(--nim-accent);
+}
+
+button.secondary:hover {
+    background: var(--nim-accent-soft);
 }
 
 table button {
@@ -225,12 +368,91 @@ table button {
     border: 1px solid var(--nim-danger);
     padding: 0.3rem 0.7rem;
     font-size: 0.85rem;
+    font-weight: 600;
 }
 
 table button:hover {
     background: var(--nim-danger);
     color: white;
 }
+
+/* ---- KI-Gateway: provider picker + conditional field groups ---- */
+
+.provider-picker {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+}
+
+.provider-picker label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.9rem 0.5rem;
+    border: 2px solid var(--nim-border);
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--nim-text);
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.provider-picker input[type="radio"] {
+    display: none;
+}
+
+.provider-picker label:has(input:checked) {
+    border-color: var(--nim-accent);
+    background: var(--nim-accent-soft);
+    color: var(--nim-accent-hover);
+}
+
+.provider-fields {
+    display: none;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding-top: 1.1rem;
+    margin-top: 1.1rem;
+    border-top: 1px solid var(--nim-border);
+}
+
+.provider-fields.active {
+    display: flex;
+}
+
+.model-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.model-suggestion {
+    background: var(--nim-surface-alt);
+    color: var(--nim-text);
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    align-self: auto;
+}
+
+.model-suggestion:hover {
+    background: var(--nim-accent-soft);
+    color: var(--nim-accent-hover);
+    text-decoration: none;
+}
+
+.field-hint {
+    font-size: 0.8rem;
+    color: var(--nim-muted);
+    margin: -0.2rem 0 0;
+}
+
+/* ---- Misc ---- */
 
 .error {
     color: var(--nim-danger);
@@ -240,7 +462,7 @@ table button:hover {
 
 .status {
     color: var(--nim-accent);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     margin: 0;
 }
 
@@ -256,4 +478,13 @@ table button:hover {
 .validation-message {
     color: var(--nim-danger);
     font-size: 0.85rem;
+}
+
+.empty-state {
+    background: var(--nim-surface);
+    border: 1px dashed var(--nim-border);
+    border-radius: 14px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    color: var(--nim-muted);
 }
