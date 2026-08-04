@@ -28,7 +28,7 @@ else
             @foreach (var row in summary)
             {
                 <tr>
-                    <td>@row.Type</td>
+                    <td>@HealthTypeCatalog.GetDisplayName(row.Type)</td>
                     <td>@row.Count</td>
                     <td>@row.LatestSampleAt.ToLocalTime().ToString("g")</td>
                 </tr>

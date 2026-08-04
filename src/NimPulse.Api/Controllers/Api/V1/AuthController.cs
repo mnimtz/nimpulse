@@ -91,16 +91,37 @@ public class AuthController(NimPulseDbContext db, JwtTokenService tokenService) 
         return Ok(ToAuthResponse(user, includeToken: false));
     }
 
+    /// <summary>Persönliche Präferenzen (aktuell nur Sync-Zeitraum) — jeder Nutzer setzt seine eigenen, kein Admin-only.</summary>
+    [HttpPut("me/preferences")]
+    [Authorize]
+    public async Task<IActionResult> UpdatePreferences([FromBody] UpdatePreferencesRequest request, CancellationToken cancellationToken)
+    {
+        var userId = HttpContext.User.RequireUserId();
+        var user = await db.Users.FindAsync([userId], cancellationToken);
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        user.SyncWindowDays = request.SyncWindowDays;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(ToAuthResponse(user, includeToken: false));
+    }
+
     private AuthResponse ToAuthResponse(User user, bool includeToken = true) => new(
         Token: includeToken ? tokenService.IssueToken(user) : null,
         Id: user.Id,
         Email: user.Email,
         DisplayName: user.DisplayName,
-        Role: user.Role.ToString());
+        Role: user.Role.ToString(),
+        SyncWindowDays: user.SyncWindowDays);
 }
 
 public record RegisterRequest(string Email, string Password, string DisplayName);
 
 public record LoginRequest(string Email, string Password);
 
-public record AuthResponse(string? Token, Guid Id, string Email, string DisplayName, string Role);
+public record UpdatePreferencesRequest(int? SyncWindowDays);
+
+public record AuthResponse(string? Token, Guid Id, string Email, string DisplayName, string Role, int? SyncWindowDays);

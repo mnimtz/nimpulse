@@ -1,0 +1,153 @@
+@page "/settings/ki-gateway"
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using NimPulse.Core.Health
+@using NimPulse.Core.Settings
+@inject NimPulseDbContext Db
+
+<PageTitle>KI-Gateway — NimPulse</PageTitle>
+
+<p><a href="/settings">← Einstellungen</a></p>
+
+<h1>KI-Gateway</h1>
+
+<EditForm Model="Input" OnValidSubmit="HandleSave" FormName="ai-settings" method="post" class="auth-form">
+    <div class="field">
+        <label for="provider">Standard-Provider</label>
+        @* Rohes <select> statt <InputSelect> — siehe Kommentar in Settings.razor: InputSelect
+           schreibt den Wert in Static-SSR nur als (ungültiges) "value"-Attribut auf <select>, das
+           echte Browser ohne Interactivity ignorieren. Explizites "selected" pro Option ist der
+           zuverlässige Weg. *@
+        <select id="provider" name="Input.DefaultProvider">
+            <option value="claude" selected="@(Input.DefaultProvider == "claude")">Claude</option>
+            <option value="azure-openai" selected="@(Input.DefaultProvider == "azure-openai")">Azure OpenAI</option>
+            <option value="openai" selected="@(Input.DefaultProvider == "openai")">OpenAI</option>
+        </select>
+    </div>
+    <div class="field">
+        <label for="claudeModel">Claude-Modell</label>
+        <InputText id="claudeModel" @bind-Value="Input.ClaudeModel" />
+    </div>
+    <div class="field">
+        <label for="claudeKey">Claude API-Key @(hasClaudeKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
+        <input id="claudeKey" type="password" name="Input.ClaudeApiKey" @bind="Input.ClaudeApiKey" autocomplete="off" />
+    </div>
+    <div class="field">
+        <label for="azureEndpoint">Azure-OpenAI-Endpoint</label>
+        <InputText id="azureEndpoint" @bind-Value="Input.AzureOpenAiEndpoint" />
+    </div>
+    <div class="field">
+        <label for="azureDeployment">Azure-OpenAI-Deployment-Name</label>
+        <InputText id="azureDeployment" @bind-Value="Input.AzureOpenAiDeploymentName" />
+    </div>
+    <div class="field">
+        <label for="azureKey">Azure OpenAI API-Key @(hasAzureKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
+        <input id="azureKey" type="password" name="Input.AzureOpenAiApiKey" @bind="Input.AzureOpenAiApiKey" autocomplete="off" />
+    </div>
+    <div class="field">
+        <label for="openAiModel">OpenAI-Modell</label>
+        <InputText id="openAiModel" @bind-Value="Input.OpenAiModel" placeholder="z. B. gpt-5" />
+    </div>
+    <div class="field">
+        <label for="openAiKey">OpenAI API-Key @(hasOpenAiKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
+        <input id="openAiKey" type="password" name="Input.OpenAiApiKey" @bind="Input.OpenAiApiKey" autocomplete="off" />
+    </div>
+
+    @if (statusMessage is not null)
+    {
+        <p class="status">@statusMessage</p>
+    }
+
+    <button type="submit">Speichern</button>
+</EditForm>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private AiSettingsModel Input { get; set; } = new();
+
+    private bool hasClaudeKey;
+    private bool hasAzureKey;
+    private bool hasOpenAiKey;
+    private string? statusMessage;
+
+    private bool IsPost => HttpContext.Request.Method == HttpMethods.Post;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Bei GET die aktuellen Werte aus der DB laden; bei POST steckt der Handler bereits die
+        // vom Nutzer eingegebenen Werte in Input — die dürfen nicht überschrieben werden, bevor
+        // HandleSave läuft.
+        if (!IsPost)
+        {
+            await LoadCurrent();
+        }
+    }
+
+    private async Task LoadCurrent()
+    {
+        var settings = await Db.AiGatewaySettings.FindAsync(1) ?? new AiGatewaySettings();
+        Input.DefaultProvider = settings.DefaultProvider;
+        Input.ClaudeModel = settings.ClaudeModel;
+        Input.AzureOpenAiEndpoint = settings.AzureOpenAiEndpoint ?? "";
+        Input.AzureOpenAiDeploymentName = settings.AzureOpenAiDeploymentName;
+        Input.OpenAiModel = settings.OpenAiModel;
+        hasClaudeKey = !string.IsNullOrWhiteSpace(settings.ClaudeApiKey);
+        hasAzureKey = !string.IsNullOrWhiteSpace(settings.AzureOpenAiApiKey);
+        hasOpenAiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey);
+    }
+
+    private async Task HandleSave()
+    {
+        var settings = await Db.AiGatewaySettings.FindAsync(1);
+        if (settings is null)
+        {
+            settings = new AiGatewaySettings { Id = 1 };
+            Db.AiGatewaySettings.Add(settings);
+        }
+
+        settings.DefaultProvider = Input.DefaultProvider;
+        settings.ClaudeModel = Input.ClaudeModel;
+        settings.AzureOpenAiEndpoint = Input.AzureOpenAiEndpoint;
+        settings.AzureOpenAiDeploymentName = Input.AzureOpenAiDeploymentName;
+        settings.OpenAiModel = Input.OpenAiModel;
+
+        if (!string.IsNullOrWhiteSpace(Input.ClaudeApiKey))
+        {
+            settings.ClaudeApiKey = Input.ClaudeApiKey;
+        }
+        if (!string.IsNullOrWhiteSpace(Input.AzureOpenAiApiKey))
+        {
+            settings.AzureOpenAiApiKey = Input.AzureOpenAiApiKey;
+        }
+        if (!string.IsNullOrWhiteSpace(Input.OpenAiApiKey))
+        {
+            settings.OpenAiApiKey = Input.OpenAiApiKey;
+        }
+
+        settings.UpdatedAt = DateTimeOffset.UtcNow;
+        await Db.SaveChangesAsync();
+
+        hasClaudeKey = !string.IsNullOrWhiteSpace(settings.ClaudeApiKey);
+        hasAzureKey = !string.IsNullOrWhiteSpace(settings.AzureOpenAiApiKey);
+        hasOpenAiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey);
+        Input.ClaudeApiKey = "";
+        Input.AzureOpenAiApiKey = "";
+        Input.OpenAiApiKey = "";
+        statusMessage = "Gespeichert.";
+    }
+
+    private class AiSettingsModel
+    {
+        public string DefaultProvider { get; set; } = "claude";
+        public string ClaudeModel { get; set; } = "claude-sonnet-5";
+        public string? ClaudeApiKey { get; set; }
+        public string AzureOpenAiDeploymentName { get; set; } = "";
+        public string? AzureOpenAiEndpoint { get; set; }
+        public string? AzureOpenAiApiKey { get; set; }
+        public string OpenAiModel { get; set; } = "";
+        public string? OpenAiApiKey { get; set; }
+    }
+}

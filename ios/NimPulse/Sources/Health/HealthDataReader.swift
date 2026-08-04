@@ -25,9 +25,11 @@ struct HealthSampleUpload: Encodable {
 /// Sync-Pfad für später statt sie hier schlecht reinzuquetschen.
 @available(iOS 15.0, *)
 enum HealthDataReader {
-    static func readRecentSamples(days: Int = 30) async throws -> [HealthSampleUpload] {
+    /// `days: nil` = "Alles" (kein Startdatum-Filter) — vom Nutzer explizit in den Sync-
+    /// Einstellungen gewählt, siehe `User.SyncWindowDays` auf der API-Seite.
+    static func readRecentSamples(days: Int?) async throws -> [HealthSampleUpload] {
         let store = HKHealthStore()
-        let start = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        let start = days.map { Calendar.current.date(byAdding: .day, value: -$0, to: Date()) ?? Date() }
         let predicate = HKQuery.predicateForSamples(withStart: start, end: Date())
 
         var quantitySpecs = HealthKitCatalog.quantitySpecs

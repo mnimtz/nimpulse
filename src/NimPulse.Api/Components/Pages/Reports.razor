@@ -22,7 +22,7 @@ else
             <select name="type">
                 @foreach (var t in availableTypes)
                 {
-                    <option value="@t" selected="@(t == SelectedType)">@t</option>
+                    <option value="@t" selected="@(t == SelectedType)">@HealthTypeCatalog.GetDisplayName(t)</option>
                 }
             </select>
         </label>
@@ -45,10 +45,11 @@ else
     {
         @if (buckets.Count == 0)
         {
-            <p>Keine Daten für <strong>@SelectedType</strong> im gewählten Zeitraum.</p>
+            <p>Keine Daten für <strong>@HealthTypeCatalog.GetDisplayName(SelectedType!)</strong> im gewählten Zeitraum.</p>
         }
         else
         {
+            <h2>@HealthTypeCatalog.GetDisplayName(SelectedType!)</h2>
             <table>
                 <thead>
                     <tr><th>Zeitraum</th><th>Anzahl</th><th>Summe</th><th>Ø</th><th>Min</th><th>Max</th></tr>

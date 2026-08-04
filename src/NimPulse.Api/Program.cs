@@ -96,53 +96,63 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<NimPulseDbContext>();
     db.Database.EnsureCreated();
-    EnsureAiGatewaySettingsColumns(db);
-}
 
-// EnsureCreated() only creates tables that don't exist yet — it never alters an existing table
-// when the model gains a column (that's what migrations are for). The three AiGatewaySettings
-// key/endpoint columns were added after the first deploy already created this table on a running
-// server, so a live database can be stuck without them ("SQLite Error 1: no such column:
-// AzureOpenAiApiKey" — reproduced against a copy of the pre-refactor schema). Additive, idempotent,
-// no data loss — safe to run on every startup regardless of which schema version is on disk.
-static void EnsureAiGatewaySettingsColumns(NimPulseDbContext db)
-{
     var connection = db.Database.GetDbConnection();
     connection.Open();
     try
     {
-        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        using (var pragma = connection.CreateCommand())
-        {
-            pragma.CommandText = "PRAGMA table_info('AiGatewaySettings')";
-            using var reader = pragma.ExecuteReader();
-            var nameOrdinal = reader.GetOrdinal("name");
-            while (reader.Read())
-            {
-                existingColumns.Add(reader.GetString(nameOrdinal));
-            }
-        }
-
-        string[] requiredColumns =
+        // EnsureCreated() only creates tables that don't exist yet — it never alters an existing
+        // table when the model gains a column (that's what migrations are for). The AiGatewaySettings
+        // key/endpoint columns were added after the first deploy already created that table on a
+        // running server, so a live database got stuck without them ("SQLite Error 1: no such
+        // column: AzureOpenAiApiKey" — a real production incident, v0.3.2). Additive, idempotent,
+        // no data loss — safe to run on every startup regardless of which schema version is on disk.
+        // Every column added after the first deploy goes here, for both tables.
+        EnsureColumns(connection, "AiGatewaySettings",
         [
-            "ClaudeApiKey", "AzureOpenAiEndpoint", "AzureOpenAiApiKey",
-            "OpenAiModel", "OpenAiApiKey",
-        ];
-        foreach (var column in requiredColumns)
-        {
-            if (existingColumns.Contains(column))
-            {
-                continue;
-            }
-
-            using var alter = connection.CreateCommand();
-            alter.CommandText = $"ALTER TABLE \"AiGatewaySettings\" ADD COLUMN \"{column}\" TEXT NULL";
-            alter.ExecuteNonQuery();
-        }
+            ("ClaudeApiKey", "TEXT NULL"),
+            ("AzureOpenAiEndpoint", "TEXT NULL"),
+            ("AzureOpenAiApiKey", "TEXT NULL"),
+            ("OpenAiModel", "TEXT NULL"),
+            ("OpenAiApiKey", "TEXT NULL"),
+        ]);
+        EnsureColumns(connection, "Users",
+        [
+            // DEFAULT 30 (not NULL) so existing rows keep today's sync behavior — NULL is reserved
+            // for a user explicitly picking "Alles", never an unset/migrated-in default.
+            ("SyncWindowDays", "INTEGER NULL DEFAULT 30"),
+        ]);
     }
     finally
     {
         connection.Close();
+    }
+}
+
+static void EnsureColumns(System.Data.Common.DbConnection connection, string table, (string Name, string SqlType)[] columns)
+{
+    var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = $"PRAGMA table_info('{table}')";
+        using var reader = pragma.ExecuteReader();
+        var nameOrdinal = reader.GetOrdinal("name");
+        while (reader.Read())
+        {
+            existingColumns.Add(reader.GetString(nameOrdinal));
+        }
+    }
+
+    foreach (var (name, sqlType) in columns)
+    {
+        if (existingColumns.Contains(name))
+        {
+            continue;
+        }
+
+        using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{name}\" {sqlType}";
+        alter.ExecuteNonQuery();
     }
 }
 

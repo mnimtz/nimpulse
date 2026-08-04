@@ -13,6 +13,13 @@ public class User
     public UserRole Role { get; set; } = UserRole.Member;
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// How far back the iOS app syncs HealthKit data, in days. Null means "alles" (no lower
+    /// bound) — but only when the user explicitly chose that; the default is 30, not null, so an
+    /// unset preference never silently becomes an unbounded (years-long) first sync.
+    /// </summary>
+    public int? SyncWindowDays { get; set; } = 30;
 }
 
 public enum UserRole

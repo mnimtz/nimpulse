@@ -1,50 +1,33 @@
 @page "/settings"
-@attribute [Authorize(Roles = "Admin")]
+@attribute [Authorize]
 @using Microsoft.EntityFrameworkCore
+@using NimPulse.Core.Auth
 @using NimPulse.Core.Health
-@using NimPulse.Core.Settings
 @inject NimPulseDbContext Db
 
-<PageTitle>KI-Gateway — NimPulse</PageTitle>
+<PageTitle>Einstellungen — NimPulse</PageTitle>
 
-<h1>KI-Gateway</h1>
+<h1>Einstellungen</h1>
 
-<EditForm Model="Input" OnValidSubmit="HandleSave" FormName="ai-settings" method="post" class="auth-form">
+<h2>Sync</h2>
+
+<EditForm Model="Input" OnValidSubmit="HandleSave" FormName="sync-settings" method="post" class="auth-form">
     <div class="field">
-        <label for="provider">Standard-Provider</label>
-        <InputSelect id="provider" @bind-Value="Input.DefaultProvider">
-            <option value="claude">Claude</option>
-            <option value="azure-openai">Azure OpenAI</option>
-            <option value="openai">OpenAI</option>
-        </InputSelect>
-    </div>
-    <div class="field">
-        <label for="claudeModel">Claude-Modell</label>
-        <InputText id="claudeModel" @bind-Value="Input.ClaudeModel" />
-    </div>
-    <div class="field">
-        <label for="claudeKey">Claude API-Key @(hasClaudeKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
-        <input id="claudeKey" type="password" name="Input.ClaudeApiKey" @bind="Input.ClaudeApiKey" autocomplete="off" />
-    </div>
-    <div class="field">
-        <label for="azureEndpoint">Azure-OpenAI-Endpoint</label>
-        <InputText id="azureEndpoint" @bind-Value="Input.AzureOpenAiEndpoint" />
-    </div>
-    <div class="field">
-        <label for="azureDeployment">Azure-OpenAI-Deployment-Name</label>
-        <InputText id="azureDeployment" @bind-Value="Input.AzureOpenAiDeploymentName" />
-    </div>
-    <div class="field">
-        <label for="azureKey">Azure OpenAI API-Key @(hasAzureKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
-        <input id="azureKey" type="password" name="Input.AzureOpenAiApiKey" @bind="Input.AzureOpenAiApiKey" autocomplete="off" />
-    </div>
-    <div class="field">
-        <label for="openAiModel">OpenAI-Modell</label>
-        <InputText id="openAiModel" @bind-Value="Input.OpenAiModel" placeholder="z. B. gpt-5" />
-    </div>
-    <div class="field">
-        <label for="openAiKey">OpenAI API-Key @(hasOpenAiKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
-        <input id="openAiKey" type="password" name="Input.OpenAiApiKey" @bind="Input.OpenAiApiKey" autocomplete="off" />
+        <label for="syncWindow">Sync-Zeitraum</label>
+        @* Bewusst ein rohes <select> statt <InputSelect>: InputSelect schreibt den gebundenen Wert
+           in Static-SSR (keine Interactivity, kein blazor.web.js) nur als "value"-HTML-Attribut auf
+           das <select>-Tag selbst — das ist kein gültiges HTML-Attribut für <select> und wird von
+           echten Browsern ignoriert, ohne dass eine Option tatsächlich als ausgewählt erscheint.
+           Ein rohes <select> mit explizitem "selected" pro <option> (wie schon in Reports.razor)
+           funktioniert dagegen zuverlässig — der name-Attribut-Wert bindet weiterhin korrekt an
+           [SupplyParameterFromForm] beim POST. *@
+        <select id="syncWindow" name="Input.SyncWindowSelection">
+            <option value="182" selected="@(Input.SyncWindowSelection == "182")">6 Monate</option>
+            <option value="365" selected="@(Input.SyncWindowSelection == "365")">1 Jahr</option>
+            <option value="730" selected="@(Input.SyncWindowSelection == "730")">2 Jahre</option>
+            <option value="1095" selected="@(Input.SyncWindowSelection == "1095")">3 Jahre</option>
+            <option value="all" selected="@(Input.SyncWindowSelection == "all")">Alles</option>
+        </select>
     </div>
 
     @if (statusMessage is not null)
@@ -55,93 +38,82 @@
     <button type="submit">Speichern</button>
 </EditForm>
 
+@if (isAdmin)
+{
+    <h2>Admin</h2>
+    <p><a href="/settings/ki-gateway">KI-Gateway →</a></p>
+}
+
 @code {
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
     [SupplyParameterFromForm]
-    private AiSettingsModel Input { get; set; } = new();
+    private SyncSettingsModel Input { get; set; } = new();
 
-    private bool hasClaudeKey;
-    private bool hasAzureKey;
-    private bool hasOpenAiKey;
+    private bool isAdmin;
     private string? statusMessage;
 
     private bool IsPost => HttpContext.Request.Method == HttpMethods.Post;
 
     protected override async Task OnInitializedAsync()
     {
+        isAdmin = HttpContext.User.IsInRole("Admin");
+
         // Bei GET die aktuellen Werte aus der DB laden; bei POST steckt der Handler bereits die
         // vom Nutzer eingegebenen Werte in Input — die dürfen nicht überschrieben werden, bevor
-        // HandleSave läuft.
+        // HandleSave läuft (gleiches Muster wie in KiGatewaySettings.razor).
         if (!IsPost)
         {
-            await LoadCurrent();
+            var userId = HttpContext.User.RequireUserId();
+            var user = await Db.Users.FindAsync(userId);
+            // "user?.SyncWindowDays ?? 30" würde ein echtes "Alles" (null INNERHALB eines
+            // vorhandenen user) nicht von "kein user gefunden" unterscheiden können — beides wird
+            // durch den ?? zu 30. Deshalb zweistufig, analog zu HealthSyncService.swift auf iOS.
+            var days = user is null ? 30 : user.SyncWindowDays;
+            Input.SyncWindowSelection = ToSelection(days);
         }
-    }
-
-    private async Task LoadCurrent()
-    {
-        var settings = await Db.AiGatewaySettings.FindAsync(1) ?? new AiGatewaySettings();
-        Input.DefaultProvider = settings.DefaultProvider;
-        Input.ClaudeModel = settings.ClaudeModel;
-        Input.AzureOpenAiEndpoint = settings.AzureOpenAiEndpoint ?? "";
-        Input.AzureOpenAiDeploymentName = settings.AzureOpenAiDeploymentName;
-        Input.OpenAiModel = settings.OpenAiModel;
-        hasClaudeKey = !string.IsNullOrWhiteSpace(settings.ClaudeApiKey);
-        hasAzureKey = !string.IsNullOrWhiteSpace(settings.AzureOpenAiApiKey);
-        hasOpenAiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey);
     }
 
     private async Task HandleSave()
     {
-        var settings = await Db.AiGatewaySettings.FindAsync(1);
-        if (settings is null)
+        var userId = HttpContext.User.RequireUserId();
+        var user = await Db.Users.FindAsync(userId);
+        if (user is null)
         {
-            settings = new AiGatewaySettings { Id = 1 };
-            Db.AiGatewaySettings.Add(settings);
+            return;
         }
 
-        settings.DefaultProvider = Input.DefaultProvider;
-        settings.ClaudeModel = Input.ClaudeModel;
-        settings.AzureOpenAiEndpoint = Input.AzureOpenAiEndpoint;
-        settings.AzureOpenAiDeploymentName = Input.AzureOpenAiDeploymentName;
-        settings.OpenAiModel = Input.OpenAiModel;
-
-        if (!string.IsNullOrWhiteSpace(Input.ClaudeApiKey))
-        {
-            settings.ClaudeApiKey = Input.ClaudeApiKey;
-        }
-        if (!string.IsNullOrWhiteSpace(Input.AzureOpenAiApiKey))
-        {
-            settings.AzureOpenAiApiKey = Input.AzureOpenAiApiKey;
-        }
-        if (!string.IsNullOrWhiteSpace(Input.OpenAiApiKey))
-        {
-            settings.OpenAiApiKey = Input.OpenAiApiKey;
-        }
-
-        settings.UpdatedAt = DateTimeOffset.UtcNow;
+        user.SyncWindowDays = Input.SyncWindowSelection == "all" ? null : int.Parse(Input.SyncWindowSelection);
         await Db.SaveChangesAsync();
 
-        hasClaudeKey = !string.IsNullOrWhiteSpace(settings.ClaudeApiKey);
-        hasAzureKey = !string.IsNullOrWhiteSpace(settings.AzureOpenAiApiKey);
-        hasOpenAiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey);
-        Input.ClaudeApiKey = "";
-        Input.AzureOpenAiApiKey = "";
-        Input.OpenAiApiKey = "";
         statusMessage = "Gespeichert.";
     }
 
-    private class AiSettingsModel
+    /// Bildet einen gespeicherten Tage-Wert auf die nächstgrößere Picker-Option ab — betrifft vor
+    /// allem den Alt-Default (30 Tage, aus der Zeit vor diesem Setting), der selbst keine der
+    /// fünf Optionen ist.
+    private static string ToSelection(int? days)
     {
-        public string DefaultProvider { get; set; } = "claude";
-        public string ClaudeModel { get; set; } = "claude-sonnet-5";
-        public string? ClaudeApiKey { get; set; }
-        public string AzureOpenAiDeploymentName { get; set; } = "";
-        public string? AzureOpenAiEndpoint { get; set; }
-        public string? AzureOpenAiApiKey { get; set; }
-        public string OpenAiModel { get; set; } = "";
-        public string? OpenAiApiKey { get; set; }
+        if (days is null)
+        {
+            return "all";
+        }
+        return days switch
+        {
+            <= 182 => "182",
+            <= 365 => "365",
+            <= 730 => "730",
+            _ => "1095",
+        };
+    }
+
+    private class SyncSettingsModel
+    {
+        // string statt int? — InputSelect<int?> spiegelt den geladenen Wert in Static-SSR nicht
+        // zuverlässig in der Options-Auswahl wider (beobachtet: DB/Input-Wert korrekt 365, Dropdown
+        // zeigte trotzdem die erste Option). String-Options (wie beim Provider-Picker auf der
+        // KI-Gateway-Seite, der das nie hatte) umgehen das komplett.
+        public string SyncWindowSelection { get; set; } = "182";
     }
 }

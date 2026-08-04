@@ -21,6 +21,18 @@ struct SettingsView: View {
 
     @State private var serverVersion: String?
 
+    @State private var syncWindowSelection = "182"
+    @State private var isSavingSyncWindow = false
+    @State private var syncWindowStatus: String?
+
+    private static let syncWindowOptions: [(label: String, value: String)] = [
+        ("6 Monate", "182"),
+        ("1 Jahr", "365"),
+        ("2 Jahre", "730"),
+        ("3 Jahre", "1095"),
+        ("Alles", "all"),
+    ]
+
     private var appVersion: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
@@ -39,6 +51,31 @@ struct SettingsView: View {
                     LabeledContent("Name", value: user.displayName)
                     LabeledContent("E-Mail", value: user.email)
                     LabeledContent("Rolle", value: user.role)
+                }
+            }
+
+            Section("Sync") {
+                Picker("Sync-Zeitraum", selection: $syncWindowSelection) {
+                    ForEach(Self.syncWindowOptions, id: \.value) { option in
+                        Text(option.label).tag(option.value)
+                    }
+                }
+
+                Button {
+                    Task { await saveSyncWindow() }
+                } label: {
+                    if isSavingSyncWindow {
+                        ProgressView()
+                    } else {
+                        Text("Speichern")
+                    }
+                }
+                .disabled(isSavingSyncWindow)
+
+                if let syncWindowStatus {
+                    Text(syncWindowStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -124,9 +161,36 @@ struct SettingsView: View {
         .navigationTitle("Einstellungen")
         .task {
             await loadServerVersion()
+            syncWindowSelection = Self.selectionFor(days: auth.currentUser?.syncWindowDays)
             if auth.currentUser?.isAdmin == true {
                 await loadAiSettings()
             }
+        }
+    }
+
+    /// Bildet einen gespeicherten Tage-Wert auf die nächstgrößere Picker-Option ab — betrifft vor
+    /// allem den Alt-Default (30 Tage, aus der Zeit vor diesem Setting), der selbst keine der
+    /// fünf Optionen ist. Speichert erst beim expliziten "Speichern"-Tap, ändert also nichts,
+    /// bevor der Nutzer das wirklich will.
+    private static func selectionFor(days: Int?) -> String {
+        guard let days else { return "all" }
+        switch days {
+        case ...182: return "182"
+        case ...365: return "365"
+        case ...730: return "730"
+        default: return "1095"
+        }
+    }
+
+    private func saveSyncWindow() async {
+        isSavingSyncWindow = true
+        defer { isSavingSyncWindow = false }
+        do {
+            let days = syncWindowSelection == "all" ? nil : Int(syncWindowSelection)
+            try await auth.updateSyncWindow(days: days)
+            syncWindowStatus = "Gespeichert."
+        } catch {
+            syncWindowStatus = "Speichern fehlgeschlagen: \(error.localizedDescription)"
         }
     }
 

@@ -50,6 +50,15 @@ final class AuthService: ObservableObject {
         currentUser = nil
     }
 
+    /// Persönliche Sync-Zeitraum-Präferenz — jeder Nutzer setzt seine eigene, kein Admin-only.
+    func updateSyncWindow(days: Int?) async throws {
+        let response: AuthResponse = try await APIClient.put(
+            "api/v1/auth/me/preferences",
+            body: UpdatePreferencesRequest(syncWindowDays: days)
+        )
+        currentUser = response
+    }
+
     private func storeAndSetCurrentUser(_ response: AuthResponse) throws {
         guard let token = response.token else {
             throw AuthError.missingToken

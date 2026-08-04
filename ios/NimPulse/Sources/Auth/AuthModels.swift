@@ -6,6 +6,7 @@ struct AuthResponse: Codable {
     let email: String
     let displayName: String
     let role: String
+    let syncWindowDays: Int?
 
     var isAdmin: Bool { role == "Admin" }
 }
@@ -19,6 +20,10 @@ struct RegisterRequest: Encodable {
 struct LoginRequest: Encodable {
     let email: String
     let password: String
+}
+
+struct UpdatePreferencesRequest: Encodable {
+    let syncWindowDays: Int?
 }
 
 enum AuthError: LocalizedError {
