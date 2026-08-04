@@ -21,8 +21,9 @@ Self-hosted Familien-Gesundheitsplattform: Apple-Health-Sync, Mehrbenutzer, Ausw
 - [x] KI-Coach: fortlaufender Chat mit Gesundheitsdaten-Kontext, `/coach` (Web) + Chat-Screen (iOS)
 - [x] EF Core Migrations statt `EnsureCreated()` (Baseline-Bootstrap für Bestandsdaten)
 - [x] Dashboard: Tages-Score (v1-Formel), Tag-für-Tag-Navigation, Dark Mode — Web (`/`) + eigener iOS-Dashboard-Tab (Neubau, existierte vorher nicht)
+- [x] PDF-Export der Reports (QuestPDF, direkt gestreamt) — Web (`/reports`) + iOS (Sharesheet im Dashboard)
+- [x] Proaktive Wochenzusammenfassung: Hintergrund-Dienst generiert einmal pro Woche und Nutzer eine KI-Zusammenfassung, erscheint als Nachricht im KI-Coach
 - [x] 1-Click-Azure-Deploy-Template (App Service + Azure Files/SQLite + Blob für Berichte)
-- [ ] PDF-Export der Reports (Phase 3)
 - [ ] Invite-Links für Familienmitglieder statt Admin-legt-direkt-an (später, falls gewünscht)
 
 Sprachumfang: **Deutsch + Englisch** (bewusst kein EFIGS+NL für dieses Projekt).
@@ -62,7 +63,9 @@ Dark Mode folgt standardmäßig `prefers-color-scheme`, der "Design"-Knopf in de
 
 ## Reports
 
-`GET /api/v1/health/reports?type=stepCount&period=day|week|month&days=30` — aggregiert Quantity-Samples in Zeit-Buckets (Anzahl, Summe, Durchschnitt, Min, Max). Dieselbe Basis trägt Tages-, Wochen- und Monatsübersichten; ein PDF-Export darauf ist ein späterer Schritt.
+`GET /api/v1/health/reports?type=stepCount&period=day|week|month&days=30&date=yyyy-MM-dd` — aggregiert Quantity-Samples in Zeit-Buckets (Anzahl, Summe, Durchschnitt, Min, Max). Dieselbe Basis trägt Tages-, Wochen- und Monatsübersichten. `date` ist optional und verankert das Fenster auf einen bestimmten Tag statt "die letzten N Tage ab jetzt" (für Tag-Navigation im Dashboard).
+
+`GET /api/v1/health/reports/pdf` (dieselben Parameter) liefert dieselbe Aggregation als PDF (`ReportPdfService`, QuestPDF) — direkt gestreamt, nicht auf dem Server gespeichert. Web: "PDF exportieren"-Link auf `/reports`. iOS: Button im Dashboard, öffnet das System-Sharesheet. Der ARM-Template-Blob-Container `reports` (`infra/azuredeploy.json`) ist dafür vorbereitet, aber v1 nutzt ihn noch nicht — ein Later-Schritt für teilbare PDF-Links.
 
 ## Lokal entwickeln
 
@@ -111,6 +114,8 @@ Seit v0.7.0 läuft das Schema über echte `dotnet ef migrations` (`src/NimPulse.
 ## KI-Coach
 
 `/coach` (Web) bzw. das Sprechblasen-Symbol oben links in der iOS-App — ein fortlaufender Chat pro Nutzer (`ChatMessages`-Tabelle), nicht nur ein zustandsloser Einzel-Request. Vor jeder Antwort baut `ChatCoachService` (`src/NimPulse.Core/Ai/ChatCoachService.cs`) automatisch einen Kontext aus den eigenen Gesundheitsdaten der letzten 7 Tage (Schritte, aktive Energie, Herzfrequenz, Ruhepuls, Körpergewicht) in den System-Prompt ein, damit der gewählte AI-Provider (Claude/Azure OpenAI/OpenAI, siehe KI-Gateway oben) über echte Trends spricht statt nur auf getippten Text zu reagieren. `GET /api/v1/ai/chat/history` + `POST /api/v1/ai/chat` bedienen iOS und andere API-Clients; `Coach.razor` im Web ruft denselben `ChatCoachService` direkt auf (keine Zwischen-HTTP-Runde). `/coach` ist aktuell die einzige Seite mit `@rendermode InteractiveServer` — alle anderen Seiten bleiben bewusst Static SSR.
+
+**Proaktive Wochenzusammenfassung:** `WeeklyInsightBackgroundService` (`src/NimPulse.Api/BackgroundServices/`) tickt alle 6h, prüft pro Nutzer über `GeneratedInsight` (Unique-Index `UserId`+`WeekStart`), ob diese ISO-Woche schon eine Zusammenfassung existiert, und generiert sonst eine über `WeeklyInsightService` (denselben `ChatCoachService`-Gesundheitskontext, anderer Prompt). Kein E-Mail-Gateway, keine Push-Notifications nötig — die Zusammenfassung landet einfach als neue Assistenten-Nachricht in der bestehenden Chat-Historie, sichtbar beim nächsten Öffnen von `/coach` bzw. dem iOS-Chat. KI-Provider-Fehler (z. B. kein Key konfiguriert) lassen den Tick einfach ohne neuen Eintrag durchlaufen, statt den Hintergrund-Dienst abzuwürgen.
 
 ## Projektstruktur
 

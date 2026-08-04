@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NimPulse.Core.Health;
 
@@ -10,9 +11,11 @@ using NimPulse.Core.Health;
 namespace NimPulse.Core.Migrations
 {
     [DbContext(typeof(NimPulseDbContext))]
-    partial class NimPulseDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260804140825_AddGeneratedInsights")]
+    partial class AddGeneratedInsights
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.29");

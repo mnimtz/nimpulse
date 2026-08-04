@@ -47,11 +47,22 @@ enum APIClient {
     }
 
     static func send<Result: Decodable>(_ request: URLRequest) async throws -> Result {
+        let data = try await sendRaw(request)
+        return try JSONDecoder().decode(Result.self, from: data)
+    }
+
+    /// Für nicht-JSON-Antworten (z. B. PDF-Downloads) — wie `get`, aber ohne JSON-Decoding.
+    static func getData(_ path: String) async throws -> Data {
+        let request = try await authorizedRequest(path: path)
+        return try await sendRaw(request)
+    }
+
+    private static func sendRaw(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             throw APIError.server(status: status, body: String(data: data, encoding: .utf8) ?? "")
         }
-        return try JSONDecoder().decode(Result.self, from: data)
+        return data
     }
 }

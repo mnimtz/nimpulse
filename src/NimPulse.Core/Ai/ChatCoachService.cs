@@ -78,7 +78,8 @@ public class ChatCoachService(AiProviderResolver providerResolver, ReportService
         }
     }
 
-    private async Task<string> BuildHealthContextAsync(Guid userId, CancellationToken cancellationToken)
+    /// <summary>internal statt private — auch von <see cref="WeeklyInsightService"/> genutzt.</summary>
+    internal async Task<string> BuildHealthContextAsync(Guid userId, CancellationToken cancellationToken)
     {
         var summary = await reportService.GetTypeSummaryAsync(userId, cancellationToken);
         if (summary.Count == 0)

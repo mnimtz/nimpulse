@@ -203,6 +203,23 @@ main .content {
     margin-bottom: 1.5rem;
 }
 
+.card-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.card-header-row h2 {
+    margin-bottom: 0;
+}
+
+.pdf-export-link {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 /* ---- Dashboard day navigation ---- */
 
 .day-nav {

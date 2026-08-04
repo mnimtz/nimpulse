@@ -8,10 +8,13 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using NimPulse.Api.BackgroundServices;
 using NimPulse.Api.Components;
 using NimPulse.Core.Ai;
 using NimPulse.Core.Auth;
 using NimPulse.Core.Health;
+
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +49,8 @@ builder.Services.AddScoped<AiProviderResolver>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<DailyScoreService>();
 builder.Services.AddScoped<ChatCoachService>();
+builder.Services.AddScoped<WeeklyInsightService>();
+builder.Services.AddHostedService<WeeklyInsightBackgroundService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AiModelListingService>();
 

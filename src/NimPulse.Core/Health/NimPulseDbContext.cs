@@ -15,6 +15,8 @@ public class NimPulseDbContext(DbContextOptions<NimPulseDbContext> options) : Db
 
     public DbSet<StoredChatMessage> ChatMessages => Set<StoredChatMessage>();
 
+    public DbSet<GeneratedInsight> GeneratedInsights => Set<GeneratedInsight>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<HealthSample>(entity =>
@@ -36,6 +38,11 @@ public class NimPulseDbContext(DbContextOptions<NimPulseDbContext> options) : Db
         modelBuilder.Entity<StoredChatMessage>(entity =>
         {
             entity.HasIndex(m => new { m.UserId, m.CreatedAt });
+        });
+
+        modelBuilder.Entity<GeneratedInsight>(entity =>
+        {
+            entity.HasIndex(i => new { i.UserId, i.WeekStart }).IsUnique();
         });
     }
 }

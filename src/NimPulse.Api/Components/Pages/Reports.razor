@@ -50,7 +50,10 @@ else
         else
         {
             <div class="card">
-                <h2>@HealthTypeCatalog.GetDisplayName(SelectedType!)</h2>
+                <div class="card-header-row">
+                    <h2>@HealthTypeCatalog.GetDisplayName(SelectedType!)</h2>
+                    <a class="pdf-export-link" href="@PdfExportUrl">PDF exportieren</a>
+                </div>
                 @{ var chartMax = buckets.Max(b => b.Sum); }
                 <div class="bar-chart">
                     @foreach (var b in buckets)
@@ -104,6 +107,7 @@ else
     private string? SelectedType => type ?? availableTypes.FirstOrDefault();
     private string Period => period ?? "Day";
     private int Days => days ?? 30;
+    private string PdfExportUrl => $"/api/v1/health/reports/pdf?type={Uri.EscapeDataString(SelectedType!)}&period={Period}&days={Days}";
 
     protected override async Task OnInitializedAsync()
     {

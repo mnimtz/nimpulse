@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NimPulse.Core.Auth;
 using NimPulse.Core.Health;
+using NimPulse.Core.Users;
 
 namespace NimPulse.Api.Controllers.Api.V1;
 
@@ -136,6 +137,35 @@ public class HealthController(NimPulseDbContext db, ReportService reports, Daily
             : await reports.GetBucketsForDateAsync(userId, type, period, date.Value.ToDateTime(TimeOnly.MinValue), days, cancellationToken);
 
         return Ok(new Report(type, period.ToString(), buckets));
+    }
+
+    /// <summary>
+    /// Selbe Aggregation wie <see cref="GetReport"/>, als PDF gerendert (siehe
+    /// <see cref="ReportPdfService"/>) — direkt gestreamt, nicht persistiert.
+    /// </summary>
+    [HttpGet("reports/pdf")]
+    public async Task<IActionResult> GetReportPdf(
+        [FromQuery] string type,
+        [FromQuery] ReportPeriod period = ReportPeriod.Day,
+        [FromQuery] int days = 30,
+        [FromQuery] DateOnly? date = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            return BadRequest("type ist erforderlich.");
+        }
+
+        var userId = HttpContext.User.RequireUserId();
+        var user = await db.Users.FirstAsync(u => u.Id == userId, cancellationToken);
+
+        var buckets = date is null
+            ? await reports.GetBucketsAsync(userId, type, period, days, cancellationToken)
+            : await reports.GetBucketsForDateAsync(userId, type, period, date.Value.ToDateTime(TimeOnly.MinValue), days, cancellationToken);
+
+        var pdfBytes = ReportPdfService.Generate(user.DisplayName, type, period, buckets);
+        var fileName = $"nimpulse-{type}-{period.ToString().ToLowerInvariant()}.pdf";
+        return File(pdfBytes, "application/pdf", fileName);
     }
 
     /// <summary>

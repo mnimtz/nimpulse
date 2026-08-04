@@ -7,6 +7,9 @@ struct DashboardView: View {
     @State private var stepChart: ReportDto?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var pdfExportURL: URL?
+    @State private var isExportingPdf = false
+    @State private var pdfErrorMessage: String?
 
     private var isToday: Bool {
         Calendar.current.isDateInToday(selectedDate)
@@ -127,10 +130,40 @@ struct DashboardView: View {
                 .foregroundStyle(Color.accentColor)
             }
             .frame(height: 160)
+
+            pdfExportControl
+
+            if let pdfErrorMessage {
+                Text(pdfErrorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+            }
         }
         .padding()
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    @ViewBuilder
+    private var pdfExportControl: some View {
+        if let pdfExportURL {
+            ShareLink(item: pdfExportURL) {
+                Label("PDF exportieren", systemImage: "square.and.arrow.up")
+            }
+            .font(.footnote)
+        } else {
+            Button {
+                Task { await exportPdf() }
+            } label: {
+                if isExportingPdf {
+                    ProgressView()
+                } else {
+                    Label("PDF exportieren", systemImage: "square.and.arrow.up")
+                }
+            }
+            .font(.footnote)
+            .disabled(isExportingPdf)
+        }
     }
 
     private func changeDay(by days: Int) {
@@ -141,6 +174,8 @@ struct DashboardView: View {
     private func load() async {
         isLoading = true
         errorMessage = nil
+        pdfExportURL = nil
+        pdfErrorMessage = nil
         do {
             async let scoreResult = DashboardService.getScore(date: selectedDate)
             async let chartResult = DashboardService.getStepChart(date: selectedDate)
@@ -150,6 +185,20 @@ struct DashboardView: View {
             errorMessage = "Laden fehlgeschlagen: \(error.localizedDescription)"
         }
         isLoading = false
+    }
+
+    private func exportPdf() async {
+        isExportingPdf = true
+        pdfErrorMessage = nil
+        do {
+            let data = try await ReportsService.getReportPdf(type: "stepCount", days: 7, date: selectedDate)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("nimpulse-schritte-\(shortDate(selectedDate)).pdf")
+            try data.write(to: url, options: .atomic)
+            pdfExportURL = url
+        } catch {
+            pdfErrorMessage = "PDF-Export fehlgeschlagen: \(error.localizedDescription)"
+        }
+        isExportingPdf = false
     }
 
     private func dayLabel(for date: Date) -> String {
