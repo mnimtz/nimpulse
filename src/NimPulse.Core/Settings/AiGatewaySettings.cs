@@ -25,5 +25,9 @@ public class AiGatewaySettings
 
     public string? AzureOpenAiApiKey { get; set; }
 
+    public string OpenAiModel { get; set; } = "";
+
+    public string? OpenAiApiKey { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
 }

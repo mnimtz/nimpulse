@@ -37,6 +37,7 @@ builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions
 // KI-Gateway settings (including the API keys — see AiGatewaySettings), not just appsettings/env.
 builder.Services.AddScoped<IAiProvider, ClaudeAiProvider>();
 builder.Services.AddScoped<IAiProvider, AzureOpenAiProvider>();
+builder.Services.AddScoped<IAiProvider, OpenAiProvider>();
 builder.Services.AddScoped<AiProviderResolver>();
 builder.Services.AddScoped<ReportService>();
 
@@ -122,7 +123,11 @@ static void EnsureAiGatewaySettingsColumns(NimPulseDbContext db)
             }
         }
 
-        string[] requiredColumns = ["ClaudeApiKey", "AzureOpenAiEndpoint", "AzureOpenAiApiKey"];
+        string[] requiredColumns =
+        [
+            "ClaudeApiKey", "AzureOpenAiEndpoint", "AzureOpenAiApiKey",
+            "OpenAiModel", "OpenAiApiKey",
+        ];
         foreach (var column in requiredColumns)
         {
             if (existingColumns.Contains(column))

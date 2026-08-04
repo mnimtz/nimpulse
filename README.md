@@ -49,7 +49,7 @@ Auth: Cookie fürs Web-Dashboard, Bearer/JWT für die iOS-App und andere API-Cli
 
 ## KI-Gateway
 
-`GET/PUT /api/v1/settings/ai` (Admin-only), auch als Formular unter `/settings` — legt fest, welcher Provider standardmäßig antwortet (`claude` oder `azure-openai`), welches Modell/Deployment, und die API-Keys selbst. Alles DB-backed (SQLite, `AiGatewaySettings`-Tabelle) statt `appsettings`/Umgebungsvariablen — der 1-Click-Deploy fragt keine AI-Keys mehr ab, ein Admin setzt sie einmalig nach dem ersten Login. GET maskiert die Keys (nur `hasClaudeApiKey`/`hasAzureOpenAiApiKey`, nie der Wert selbst); ein leeres Key-Feld beim Speichern lässt den bestehenden Key unangetastet. In der iOS-App: Zahnrad-Symbol → Einstellungen (nur für Admins sichtbar).
+`GET/PUT /api/v1/settings/ai` (Admin-only), auch als Formular unter `/settings` — legt fest, welcher Provider standardmäßig antwortet (`claude`, `azure-openai` oder `openai`), welches Modell/Deployment, und die API-Keys selbst. Drei Provider zur Wahl: Claude (Anthropic), Azure OpenAI (eigene Azure-Subscription, deployment-name-basiert) und OpenAI direkt (eigener OpenAI-Account, freies Modell-Textfeld z. B. `gpt-5` — kein Azure-Resource nötig). Alles DB-backed (SQLite, `AiGatewaySettings`-Tabelle) statt `appsettings`/Umgebungsvariablen — der 1-Click-Deploy fragt keine AI-Keys mehr ab, ein Admin setzt sie einmalig nach dem ersten Login. GET maskiert die Keys (nur `hasClaudeApiKey`/`hasAzureOpenAiApiKey`/`hasOpenAiApiKey`, nie der Wert selbst); ein leeres Key-Feld beim Speichern lässt den bestehenden Key unangetastet. In der iOS-App: Zahnrad-Symbol → Einstellungen (nur für Admins sichtbar).
 
 ## Reports
 

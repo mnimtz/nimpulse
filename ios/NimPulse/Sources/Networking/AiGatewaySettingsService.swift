@@ -11,6 +11,8 @@ struct AiGatewaySettingsDto: Codable {
     var azureOpenAiDeploymentName: String
     var azureOpenAiEndpoint: String?
     var hasAzureOpenAiApiKey: Bool
+    var openAiModel: String
+    var hasOpenAiApiKey: Bool
 }
 
 /// Spiegelt `UpdateAiGatewaySettingsRequest`. Die beiden Key-Felder werden nur gesendet, wenn der
@@ -23,6 +25,8 @@ struct UpdateAiGatewaySettingsRequest: Codable {
     var azureOpenAiDeploymentName: String
     var azureOpenAiEndpoint: String?
     var azureOpenAiApiKey: String?
+    var openAiModel: String
+    var openAiApiKey: String?
 }
 
 /// Admin-only — Backend prüft die Rolle server-seitig ([Authorize(Roles = "Admin")]), das hier

@@ -37,6 +37,7 @@ public class AiSettingsController(NimPulseDbContext db) : ControllerBase
         settings.ClaudeModel = request.ClaudeModel;
         settings.AzureOpenAiDeploymentName = request.AzureOpenAiDeploymentName;
         settings.AzureOpenAiEndpoint = request.AzureOpenAiEndpoint;
+        settings.OpenAiModel = request.OpenAiModel;
 
         // Leeres Feld = "unverändert lassen", nicht "Key löschen" — sonst müsste man bei jeder
         // Änderung (z. B. nur das Modell wechseln) alle Keys neu eintippen.
@@ -47,6 +48,10 @@ public class AiSettingsController(NimPulseDbContext db) : ControllerBase
         if (!string.IsNullOrWhiteSpace(request.AzureOpenAiApiKey))
         {
             settings.AzureOpenAiApiKey = request.AzureOpenAiApiKey;
+        }
+        if (!string.IsNullOrWhiteSpace(request.OpenAiApiKey))
+        {
+            settings.OpenAiApiKey = request.OpenAiApiKey;
         }
 
         settings.UpdatedAt = DateTimeOffset.UtcNow;
@@ -62,6 +67,8 @@ public class AiSettingsController(NimPulseDbContext db) : ControllerBase
         AzureOpenAiDeploymentName: settings.AzureOpenAiDeploymentName,
         AzureOpenAiEndpoint: settings.AzureOpenAiEndpoint,
         HasAzureOpenAiApiKey: !string.IsNullOrWhiteSpace(settings.AzureOpenAiApiKey),
+        OpenAiModel: settings.OpenAiModel,
+        HasOpenAiApiKey: !string.IsNullOrWhiteSpace(settings.OpenAiApiKey),
         UpdatedAt: settings.UpdatedAt);
 }
 
@@ -72,6 +79,8 @@ public record AiGatewaySettingsView(
     string AzureOpenAiDeploymentName,
     string? AzureOpenAiEndpoint,
     bool HasAzureOpenAiApiKey,
+    string OpenAiModel,
+    bool HasOpenAiApiKey,
     DateTimeOffset UpdatedAt);
 
 public record UpdateAiGatewaySettingsRequest(
@@ -80,4 +89,6 @@ public record UpdateAiGatewaySettingsRequest(
     string? ClaudeApiKey,
     string AzureOpenAiDeploymentName,
     string? AzureOpenAiEndpoint,
-    string? AzureOpenAiApiKey);
+    string? AzureOpenAiApiKey,
+    string OpenAiModel,
+    string? OpenAiApiKey);

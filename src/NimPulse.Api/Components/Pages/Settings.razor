@@ -15,6 +15,7 @@
         <InputSelect id="provider" @bind-Value="Input.DefaultProvider">
             <option value="claude">Claude</option>
             <option value="azure-openai">Azure OpenAI</option>
+            <option value="openai">OpenAI</option>
         </InputSelect>
     </div>
     <div class="field">
@@ -37,6 +38,14 @@
         <label for="azureKey">Azure OpenAI API-Key @(hasAzureKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
         <input id="azureKey" type="password" name="Input.AzureOpenAiApiKey" @bind="Input.AzureOpenAiApiKey" autocomplete="off" />
     </div>
+    <div class="field">
+        <label for="openAiModel">OpenAI-Modell</label>
+        <InputText id="openAiModel" @bind-Value="Input.OpenAiModel" placeholder="z. B. gpt-5" />
+    </div>
+    <div class="field">
+        <label for="openAiKey">OpenAI API-Key @(hasOpenAiKey ? "(gesetzt — leer lassen zum Beibehalten)" : "")</label>
+        <input id="openAiKey" type="password" name="Input.OpenAiApiKey" @bind="Input.OpenAiApiKey" autocomplete="off" />
+    </div>
 
     @if (statusMessage is not null)
     {
@@ -55,6 +64,7 @@
 
     private bool hasClaudeKey;
     private bool hasAzureKey;
+    private bool hasOpenAiKey;
     private string? statusMessage;
 
     private bool IsPost => HttpContext.Request.Method == HttpMethods.Post;
@@ -77,8 +87,10 @@
         Input.ClaudeModel = settings.ClaudeModel;
         Input.AzureOpenAiEndpoint = settings.AzureOpenAiEndpoint ?? "";
         Input.AzureOpenAiDeploymentName = settings.AzureOpenAiDeploymentName;
+        Input.OpenAiModel = settings.OpenAiModel;
         hasClaudeKey = !string.IsNullOrWhiteSpace(settings.ClaudeApiKey);
         hasAzureKey = !string.IsNullOrWhiteSpace(settings.AzureOpenAiApiKey);
+        hasOpenAiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey);
     }
 
     private async Task HandleSave()
@@ -94,6 +106,7 @@
         settings.ClaudeModel = Input.ClaudeModel;
         settings.AzureOpenAiEndpoint = Input.AzureOpenAiEndpoint;
         settings.AzureOpenAiDeploymentName = Input.AzureOpenAiDeploymentName;
+        settings.OpenAiModel = Input.OpenAiModel;
 
         if (!string.IsNullOrWhiteSpace(Input.ClaudeApiKey))
         {
@@ -103,14 +116,20 @@
         {
             settings.AzureOpenAiApiKey = Input.AzureOpenAiApiKey;
         }
+        if (!string.IsNullOrWhiteSpace(Input.OpenAiApiKey))
+        {
+            settings.OpenAiApiKey = Input.OpenAiApiKey;
+        }
 
         settings.UpdatedAt = DateTimeOffset.UtcNow;
         await Db.SaveChangesAsync();
 
         hasClaudeKey = !string.IsNullOrWhiteSpace(settings.ClaudeApiKey);
         hasAzureKey = !string.IsNullOrWhiteSpace(settings.AzureOpenAiApiKey);
+        hasOpenAiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey);
         Input.ClaudeApiKey = "";
         Input.AzureOpenAiApiKey = "";
+        Input.OpenAiApiKey = "";
         statusMessage = "Gespeichert.";
     }
 
@@ -122,5 +141,7 @@
         public string AzureOpenAiDeploymentName { get; set; } = "";
         public string? AzureOpenAiEndpoint { get; set; }
         public string? AzureOpenAiApiKey { get; set; }
+        public string OpenAiModel { get; set; } = "";
+        public string? OpenAiApiKey { get; set; }
     }
 }

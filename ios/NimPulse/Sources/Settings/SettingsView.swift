@@ -9,10 +9,13 @@ struct SettingsView: View {
         hasClaudeApiKey: false,
         azureOpenAiDeploymentName: "",
         azureOpenAiEndpoint: "",
-        hasAzureOpenAiApiKey: false
+        hasAzureOpenAiApiKey: false,
+        openAiModel: "",
+        hasOpenAiApiKey: false
     )
     @State private var claudeApiKeyInput = ""
     @State private var azureOpenAiApiKeyInput = ""
+    @State private var openAiApiKeyInput = ""
     @State private var isLoadingAiSettings = false
     @State private var aiSettingsStatus: String?
 
@@ -46,6 +49,7 @@ struct SettingsView: View {
                     Picker("Standard-Provider", selection: $aiSettings.defaultProvider) {
                         Text("Claude").tag("claude")
                         Text("Azure OpenAI").tag("azure-openai")
+                        Text("OpenAI").tag("openai")
                     }
 
                     TextField("Claude-Modell", text: $aiSettings.claudeModel)
@@ -77,6 +81,17 @@ struct SettingsView: View {
                     SecureField(
                         aiSettings.hasAzureOpenAiApiKey ? "Azure OpenAI API-Key (gesetzt — leer lassen zum Beibehalten)" : "Azure OpenAI API-Key",
                         text: $azureOpenAiApiKeyInput
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                    TextField("OpenAI-Modell (z. B. gpt-5)", text: $aiSettings.openAiModel)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    SecureField(
+                        aiSettings.hasOpenAiApiKey ? "OpenAI API-Key (gesetzt — leer lassen zum Beibehalten)" : "OpenAI API-Key",
+                        text: $openAiApiKeyInput
                     )
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -143,11 +158,14 @@ struct SettingsView: View {
                 claudeApiKey: claudeApiKeyInput.isEmpty ? nil : claudeApiKeyInput,
                 azureOpenAiDeploymentName: aiSettings.azureOpenAiDeploymentName,
                 azureOpenAiEndpoint: aiSettings.azureOpenAiEndpoint,
-                azureOpenAiApiKey: azureOpenAiApiKeyInput.isEmpty ? nil : azureOpenAiApiKeyInput
+                azureOpenAiApiKey: azureOpenAiApiKeyInput.isEmpty ? nil : azureOpenAiApiKeyInput,
+                openAiModel: aiSettings.openAiModel,
+                openAiApiKey: openAiApiKeyInput.isEmpty ? nil : openAiApiKeyInput
             )
             aiSettings = try await AiGatewaySettingsService.update(request)
             claudeApiKeyInput = ""
             azureOpenAiApiKeyInput = ""
+            openAiApiKeyInput = ""
             aiSettingsStatus = "Gespeichert."
         } catch {
             aiSettingsStatus = "Speichern fehlgeschlagen: \(error.localizedDescription)"

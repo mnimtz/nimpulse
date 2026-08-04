@@ -10,6 +10,8 @@ public class AiOptions
     public ClaudeOptions Claude { get; set; } = new();
 
     public AzureOpenAiOptions AzureOpenAi { get; set; } = new();
+
+    public OpenAiOptions OpenAi { get; set; } = new();
 }
 
 public class ClaudeOptions
@@ -28,4 +30,14 @@ public class AzureOpenAiOptions
 
     /// <summary>The Azure OpenAI deployment name (configured in the Azure portal), not a raw OpenAI model ID.</summary>
     public string DeploymentName { get; set; } = "";
+}
+
+public class OpenAiOptions
+{
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>Raw OpenAI model ID (e.g. "gpt-5") — no default; the admin sets it explicitly in
+    /// KI-Gateway settings, since OpenAI's model catalog shifts and a stale hardcoded default
+    /// would silently break instead of failing clearly.</summary>
+    public string Model { get; set; } = "";
 }
