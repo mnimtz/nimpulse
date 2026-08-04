@@ -488,3 +488,79 @@ table button:hover {
     text-align: center;
     color: var(--nim-muted);
 }
+
+/* ---- KI-Coach chat ---- */
+
+.chat-card {
+    display: flex;
+    flex-direction: column;
+    height: 65vh;
+    max-height: 720px;
+    padding: 1.25rem;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding-bottom: 0.5rem;
+}
+
+.chat-bubble-row {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.chat-bubble-row-user {
+    justify-content: flex-end;
+}
+
+.chat-bubble {
+    max-width: 75%;
+    padding: 0.6rem 0.9rem;
+    border-radius: 14px;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.chat-bubble-assistant {
+    background: var(--nim-surface-alt);
+    color: var(--nim-text);
+    border-bottom-left-radius: 4px;
+}
+
+.chat-bubble-user {
+    background: var(--nim-accent);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-bubble-loading {
+    color: var(--nim-muted);
+    font-style: italic;
+}
+
+.chat-input-row {
+    display: flex;
+    gap: 0.6rem;
+    padding-top: 1rem;
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--nim-border);
+}
+
+.chat-input-row input {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--nim-border);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: var(--nim-bg);
+    color: var(--nim-text);
+}
+
+.chat-input-row button {
+    align-self: auto;
+}

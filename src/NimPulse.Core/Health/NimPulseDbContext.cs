@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NimPulse.Core.Ai;
 using NimPulse.Core.Settings;
 using NimPulse.Core.Users;
 
@@ -11,6 +12,8 @@ public class NimPulseDbContext(DbContextOptions<NimPulseDbContext> options) : Db
     public DbSet<User> Users => Set<User>();
 
     public DbSet<AiGatewaySettings> AiGatewaySettings => Set<AiGatewaySettings>();
+
+    public DbSet<StoredChatMessage> ChatMessages => Set<StoredChatMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,6 +31,11 @@ public class NimPulseDbContext(DbContextOptions<NimPulseDbContext> options) : Db
             entity.HasIndex(u => u.Email).IsUnique();
             entity.Property(u => u.Email).HasMaxLength(256);
             entity.Property(u => u.DisplayName).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<StoredChatMessage>(entity =>
+        {
+            entity.HasIndex(m => new { m.UserId, m.CreatedAt });
         });
     }
 }

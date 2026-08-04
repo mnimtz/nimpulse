@@ -14,11 +14,16 @@ public class ClaudeAiProvider(IOptions<AiOptions> options, NimPulseDbContext db)
 {
     public string Name => "claude";
 
-    public async Task<string> AskAsync(string systemPrompt, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string systemPrompt, IReadOnlyList<ChatTurn> history, string userMessage, CancellationToken cancellationToken = default)
     {
         var settings = await db.AiGatewaySettings.FindAsync([1], cancellationToken);
         var apiKey = string.IsNullOrWhiteSpace(settings?.ClaudeApiKey) ? options.Value.Claude.ApiKey : settings.ClaudeApiKey;
         var model = string.IsNullOrWhiteSpace(settings?.ClaudeModel) ? options.Value.Claude.Model : settings.ClaudeModel;
+
+        var messages = history
+            .Select(turn => new MessageParam { Role = turn.Role == "user" ? Role.User : Role.Assistant, Content = turn.Content })
+            .Append(new MessageParam { Role = Role.User, Content = userMessage })
+            .ToList();
 
         var client = new AnthropicClient { ApiKey = apiKey };
         var response = await client.Messages.Create(new MessageCreateParams
@@ -26,7 +31,7 @@ public class ClaudeAiProvider(IOptions<AiOptions> options, NimPulseDbContext db)
             Model = model,
             MaxTokens = 2048,
             System = systemPrompt,
-            Messages = [new() { Role = Role.User, Content = userMessage }],
+            Messages = messages,
         });
 
         return string.Concat(response.Content

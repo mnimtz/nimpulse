@@ -18,6 +18,8 @@ Self-hosted Familien-Gesundheitsplattform: Apple-Health-Sync, Mehrbenutzer, Ausw
 - [x] Health-Daten-Sync: iOS liest **alle** Quantity-/Category-HealthKit-Typen und lädt sie userbezogen hoch (SQLite, Upsert nach HealthKit-UUID)
 - [x] Reports: Aggregation (Summe/Durchschnitt/Min/Max) pro Typ, Tag/Woche/Monat
 - [x] KI-Gateway: Admin wählt Standard-AI-Provider/-Modell/-Keys zur Laufzeit (Settings-Screen in App und Web-Dashboard) — keine Keys mehr im 1-Click-Deploy-Formular
+- [x] KI-Coach: fortlaufender Chat mit Gesundheitsdaten-Kontext, `/coach` (Web) + Chat-Screen (iOS)
+- [x] EF Core Migrations statt `EnsureCreated()` (Baseline-Bootstrap für Bestandsdaten)
 - [x] 1-Click-Azure-Deploy-Template (App Service + Azure Files/SQLite + Blob für Berichte)
 - [ ] PDF-Export der Reports (Phase 3)
 - [ ] Invite-Links für Familienmitglieder statt Admin-legt-direkt-an (später, falls gewünscht)
@@ -95,9 +97,13 @@ Klick den **Deploy to Azure**-Button oben. Pflichtparameter: `siteName`. AI-Prov
 
 Der EF-Core-SQLite-Provider übersetzt `Where`/`OrderBy`/`Max`/`Min` auf `DateTimeOffset`-Spalten (z. B. `HealthSample.StartDate`) server-seitig **nicht zuverlässig** — teils mit `NotSupportedException`, teils mit `InvalidOperationException: ... could not be translated`, sobald ein Vergleich mit einem weiteren Prädikat kombiniert wird. Betroffene Stellen (`ReportService`, `HealthController.GetSamples`, `AdminUsersController.List`) filtern/sortieren deshalb bewusst erst nach `ToListAsync()` clientseitig. Bei neuen Queries auf `StartDate`/`CreatedAt`/`SyncedAt` denselben Zweischritt verwenden — direkt in der DB-Query vergleichen/sortieren bricht.
 
-## Bekannte Einschränkung: EnsureCreated() migriert bestehende Tabellen nicht
+## Schema-Änderungen: EF Core Migrations
 
-`Database.EnsureCreated()` legt Tabellen nur an, wenn sie noch nicht existieren — ändert eine bereits laufende Datenbank aber **nie**, wenn das Modell eine Spalte dazubekommt. Ist das schon live passiert (z. B. `AiGatewaySettings.ClaudeApiKey`/`AzureOpenAiEndpoint`/`AzureOpenAiApiKey`, nachträglich hinzugefügt, nachdem ein Server schon einmal gestartet war), fehlen diese Spalten auf dem echten Deployment — `SQLite Error 1: no such column: ...`. Für genau diesen Fall läuft beim Start jetzt ein additiver, idempotenter Nachrüst-Schritt (`EnsureAiGatewaySettingsColumns` in `Program.cs`, `ALTER TABLE ... ADD COLUMN`, keine Datenverluste). **Das ist ein Pflaster, kein Ersatz für echte EF-Core-Migrations** — jetzt, wo echte (wenn auch familiengroße) Daten auf dem Azure-Deployment liegen, sollte `EnsureCreated()` bei der nächsten größeren Schema-Änderung durch `Database.Migrate()` + eine Baseline-Migration ersetzt werden, statt für jede neue Spalte einen weiteren manuellen `ALTER TABLE`-Block zu schreiben.
+Seit v0.7.0 läuft das Schema über echte `dotnet ef migrations` (`src/NimPulse.Core/Migrations/`) statt `Database.EnsureCreated()` + manuellem `ALTER TABLE` (das hatte zuvor schon einmal einen echten Vorfall verursacht: nachträglich hinzugefügte `AiGatewaySettings`-Spalten fehlten auf dem laufenden Azure-Deployment). Beim Start entscheidet `BootstrapDatabase` in `Program.cs`: existieren bereits Tabellen, aber keine `__EFMigrationsHistory` (= eine alte `EnsureCreated()`-DB), wird die Baseline-Migration `20260804104900_InitialBaseline` als "bereits angewendet" markiert, ohne ihre `CREATE TABLE`s erneut auszuführen — danach läuft `Database.Migrate()` normal für alles Weitere. Bei einer komplett neuen DB läuft die Baseline-Migration regulär durch. Jede künftige Schema-Änderung ist ab jetzt eine echte Migration, kein manueller `ALTER TABLE`-Block mehr.
+
+## KI-Coach
+
+`/coach` (Web) bzw. das Sprechblasen-Symbol oben links in der iOS-App — ein fortlaufender Chat pro Nutzer (`ChatMessages`-Tabelle), nicht nur ein zustandsloser Einzel-Request. Vor jeder Antwort baut `ChatCoachService` (`src/NimPulse.Core/Ai/ChatCoachService.cs`) automatisch einen Kontext aus den eigenen Gesundheitsdaten der letzten 7 Tage (Schritte, aktive Energie, Herzfrequenz, Ruhepuls, Körpergewicht) in den System-Prompt ein, damit der gewählte AI-Provider (Claude/Azure OpenAI/OpenAI, siehe KI-Gateway oben) über echte Trends spricht statt nur auf getippten Text zu reagieren. `GET /api/v1/ai/chat/history` + `POST /api/v1/ai/chat` bedienen iOS und andere API-Clients; `Coach.razor` im Web ruft denselben `ChatCoachService` direkt auf (keine Zwischen-HTTP-Runde). `/coach` ist aktuell die einzige Seite mit `@rendermode InteractiveServer` — alle anderen Seiten bleiben bewusst Static SSR.
 
 ## Projektstruktur
 

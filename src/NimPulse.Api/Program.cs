@@ -23,10 +23,14 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     });
 
-// Web-Dashboard (Login/Register/Reports/Admin/KI-Gateway im Browser) — static server rendering,
-// bewusst ohne Interactive-Server-Rendermode: kein SignalR-Circuit nötig, klassische Formular-
-// Posts/Redirects reichen für dieses Admin-/Family-Scale-UI völlig.
-builder.Services.AddRazorComponents();
+// Web-Dashboard (Login/Register/Reports/Admin/KI-Gateway im Browser) — static server rendering für
+// fast alle Seiten, kein SignalR-Circuit nötig, klassische Formular-Posts/Redirects reichen für
+// dieses Admin-/Family-Scale-UI völlig. Einzige Ausnahme: /coach (KI-Chat) braucht laufende
+// Interaktion ohne Full-Page-Reload — deshalb AddInteractiveServerComponents() zusätzlich zu Static
+// SSR, aber NUR Coach.razor deklariert @rendermode InteractiveServer; alle anderen Seiten bleiben
+// unverändert statisch.
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
@@ -40,6 +44,7 @@ builder.Services.AddScoped<IAiProvider, AzureOpenAiProvider>();
 builder.Services.AddScoped<IAiProvider, OpenAiProvider>();
 builder.Services.AddScoped<AiProviderResolver>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<ChatCoachService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AiModelListingService>();
 
@@ -92,70 +97,79 @@ builder.Services.AddDbContext<NimPulseDbContext>(options => options.UseSqlite(co
 
 var app = builder.Build();
 
-// No formal EF migrations yet — the schema is still moving too fast at this stage.
-// Switch to Database.Migrate() once real user data exists that must survive schema changes.
+// Real EF Core migrations from here on (replacing EnsureCreated() + ad-hoc ALTER TABLE, which
+// caused a real production incident in v0.3.2 — EnsureCreated() never alters an existing table
+// when the model gains a column). Every deployment before this point was created via
+// EnsureCreated(), so its tables already exist but there's no __EFMigrationsHistory row for
+// "InitialBaseline" (which defines those same tables) — running it normally would fail with
+// "table already exists". BootstrapDatabase detects that case and marks InitialBaseline as
+// already applied without re-running it, before handing off to Database.Migrate() for anything
+// newer. A genuinely fresh database has no tables at all, so it just runs InitialBaseline like
+// any other migration. Every schema change from now on is `dotnet ef migrations add ...`, not a
+// new manual ALTER TABLE block.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<NimPulseDbContext>();
-    db.Database.EnsureCreated();
+    BootstrapDatabase(db);
+}
+
+static void BootstrapDatabase(NimPulseDbContext db)
+{
+    const string baselineMigrationId = "20260804104900_InitialBaseline";
+    const string productVersion = "8.0.29";
 
     var connection = db.Database.GetDbConnection();
     connection.Open();
     try
     {
-        // EnsureCreated() only creates tables that don't exist yet — it never alters an existing
-        // table when the model gains a column (that's what migrations are for). The AiGatewaySettings
-        // key/endpoint columns were added after the first deploy already created that table on a
-        // running server, so a live database got stuck without them ("SQLite Error 1: no such
-        // column: AzureOpenAiApiKey" — a real production incident, v0.3.2). Additive, idempotent,
-        // no data loss — safe to run on every startup regardless of which schema version is on disk.
-        // Every column added after the first deploy goes here, for both tables.
-        EnsureColumns(connection, "AiGatewaySettings",
-        [
-            ("ClaudeApiKey", "TEXT NULL"),
-            ("AzureOpenAiEndpoint", "TEXT NULL"),
-            ("AzureOpenAiApiKey", "TEXT NULL"),
-            ("OpenAiModel", "TEXT NULL"),
-            ("OpenAiApiKey", "TEXT NULL"),
-        ]);
-        EnsureColumns(connection, "Users",
-        [
-            // DEFAULT 30 (not NULL) so existing rows keep today's sync behavior — NULL is reserved
-            // for a user explicitly picking "Alles", never an unset/migrated-in default.
-            ("SyncWindowDays", "INTEGER NULL DEFAULT 30"),
-        ]);
+        bool usersTableExists;
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Users'";
+            usersTableExists = Convert.ToInt64(cmd.ExecuteScalar()) > 0;
+        }
+
+        bool historyTableExists;
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory'";
+            historyTableExists = Convert.ToInt64(cmd.ExecuteScalar()) > 0;
+        }
+
+        if (usersTableExists && !historyTableExists)
+        {
+            using (var createHistory = connection.CreateCommand())
+            {
+                createHistory.CommandText = """
+                    CREATE TABLE "__EFMigrationsHistory" (
+                        "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                        "ProductVersion" TEXT NOT NULL
+                    );
+                    """;
+                createHistory.ExecuteNonQuery();
+            }
+
+            using (var markApplied = connection.CreateCommand())
+            {
+                markApplied.CommandText = "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ($id, $version)";
+                var idParam = markApplied.CreateParameter();
+                idParam.ParameterName = "$id";
+                idParam.Value = baselineMigrationId;
+                markApplied.Parameters.Add(idParam);
+                var versionParam = markApplied.CreateParameter();
+                versionParam.ParameterName = "$version";
+                versionParam.Value = productVersion;
+                markApplied.Parameters.Add(versionParam);
+                markApplied.ExecuteNonQuery();
+            }
+        }
     }
     finally
     {
         connection.Close();
     }
-}
 
-static void EnsureColumns(System.Data.Common.DbConnection connection, string table, (string Name, string SqlType)[] columns)
-{
-    var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    using (var pragma = connection.CreateCommand())
-    {
-        pragma.CommandText = $"PRAGMA table_info('{table}')";
-        using var reader = pragma.ExecuteReader();
-        var nameOrdinal = reader.GetOrdinal("name");
-        while (reader.Read())
-        {
-            existingColumns.Add(reader.GetString(nameOrdinal));
-        }
-    }
-
-    foreach (var (name, sqlType) in columns)
-    {
-        if (existingColumns.Contains(name))
-        {
-            continue;
-        }
-
-        using var alter = connection.CreateCommand();
-        alter.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{name}\" {sqlType}";
-        alter.ExecuteNonQuery();
-    }
+    db.Database.Migrate();
 }
 
 app.UseHttpsRedirection();
@@ -165,7 +179,8 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapControllers();
-app.MapRazorComponents<App>();
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
 app.MapPost("/logout", async (HttpContext context, IAntiforgery antiforgery) =>
 {

@@ -17,7 +17,7 @@ public class AzureOpenAiProvider(IOptions<AiOptions> options, NimPulseDbContext 
 {
     public string Name => "azure-openai";
 
-    public async Task<string> AskAsync(string systemPrompt, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<string> AskAsync(string systemPrompt, IReadOnlyList<ChatTurn> history, string userMessage, CancellationToken cancellationToken = default)
     {
         var settings = await db.AiGatewaySettings.FindAsync([1], cancellationToken);
         var fallback = options.Value.AzureOpenAi;
@@ -33,11 +33,9 @@ public class AzureOpenAiProvider(IOptions<AiOptions> options, NimPulseDbContext 
         var client = new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(apiKey));
         var chatClient = client.GetChatClient(deploymentName);
 
-        ChatMessage[] messages =
-        [
-            new SystemChatMessage(systemPrompt),
-            new UserChatMessage(userMessage),
-        ];
+        var messages = new List<ChatMessage> { new SystemChatMessage(systemPrompt) };
+        messages.AddRange(history.Select(turn => turn.Role == "user" ? (ChatMessage)new UserChatMessage(turn.Content) : new AssistantChatMessage(turn.Content)));
+        messages.Add(new UserChatMessage(userMessage));
 
         var response = await chatClient.CompleteChatAsync(messages, cancellationToken: cancellationToken);
         return response.Value.Content[0].Text;

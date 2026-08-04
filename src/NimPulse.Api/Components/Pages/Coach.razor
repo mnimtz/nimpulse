@@ -1,0 +1,96 @@
+@page "/coach"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using NimPulse.Core.Ai
+@using NimPulse.Core.Auth
+@inject ChatCoachService ChatCoachService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>KI-Coach — NimPulse</PageTitle>
+
+<h1>KI-Coach</h1>
+
+<div class="card chat-card">
+    <div class="chat-messages">
+        @if (!isLoaded)
+        {
+            <p class="hint">Lädt…</p>
+        }
+        else if (messages.Count == 0)
+        {
+            <p class="hint">Frag mich etwas zu deinen Gesundheitsdaten — ich kenne deine aktuellen Werte aus den letzten 7 Tagen.</p>
+        }
+        @foreach (var msg in messages)
+        {
+            <div class="chat-bubble-row @(msg.Role == ChatMessageRole.User ? "chat-bubble-row-user" : "")">
+                <div class="chat-bubble @(msg.Role == ChatMessageRole.User ? "chat-bubble-user" : "chat-bubble-assistant")">
+                    @msg.Content
+                </div>
+            </div>
+        }
+        @if (isSending)
+        {
+            <div class="chat-bubble-row">
+                <div class="chat-bubble chat-bubble-assistant chat-bubble-loading">Denkt nach…</div>
+            </div>
+        }
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <p class="error">@errorMessage</p>
+    }
+
+    <EditForm Model="this" OnValidSubmit="SendMessage" class="chat-input-row">
+        <input @bind="currentMessage" @bind:event="oninput" placeholder="Nachricht schreiben…" disabled="@isSending" autocomplete="off" />
+        <button type="submit" disabled="@(isSending || string.IsNullOrWhiteSpace(currentMessage))">Senden</button>
+    </EditForm>
+</div>
+
+@code {
+    private List<StoredChatMessage> messages = new();
+    private string currentMessage = "";
+    private bool isSending;
+    private bool isLoaded;
+    private string? errorMessage;
+    private Guid userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Interactive Server, kein HttpContext-CascadingParameter verfügbar (das gibt es nur bei
+        // Static SSR) — die UserId einmalig beim Circuit-Start über den AuthenticationStateProvider
+        // holen und für die Laufzeit des Circuits merken, statt sie bei jeder Interaktion neu
+        // aufzulösen (HttpContext ist nach dem initialen Request ohnehin nicht mehr verlässlich da).
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        userId = state.User.RequireUserId();
+
+        messages = await ChatCoachService.GetHistoryAsync(userId);
+        isLoaded = true;
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(currentMessage) || isSending)
+        {
+            return;
+        }
+
+        var text = currentMessage;
+        currentMessage = "";
+        isSending = true;
+        errorMessage = null;
+
+        var result = await ChatCoachService.SendMessageAsync(userId, text, null);
+        messages.Add(result.UserMessage);
+        if (result.AssistantMessage is not null)
+        {
+            messages.Add(result.AssistantMessage);
+        }
+        else
+        {
+            errorMessage = result.Error;
+        }
+
+        isSending = false;
+    }
+}

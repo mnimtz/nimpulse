@@ -84,6 +84,13 @@ struct ContentView: View {
             .padding()
         }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink {
+                    ChatView()
+                } label: {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
                     SettingsView()
