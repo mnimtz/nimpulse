@@ -8,11 +8,69 @@
     --nim-accent: #0f766e;
     --nim-accent-soft: #e3f3f0;
     --nim-accent-hover: #0b5e58;
+    --nim-accent-light: #34a396;
     --nim-danger: #c0392b;
     --nim-danger-soft: #fbeaea;
     --shadow-sm: 0 1px 2px rgba(16, 40, 34, 0.06);
     --shadow-md: 0 8px 24px rgba(16, 40, 34, 0.08);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Dark palette follows the OS preference by default; the "Design"-toggle in NavMenu overrides it
+   via a data-theme attribute on <html> (set by the inline script in App.razor, before first paint
+   to avoid a flash of the wrong theme). Same token names throughout — components only ever
+   reference var(--nim-*), never a raw color, so no component rule needs to change here. */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --nim-bg: #10201c;
+        --nim-surface: #182823;
+        --nim-surface-alt: #1e332c;
+        --nim-text: #eaf2f0;
+        --nim-muted: #8fa39d;
+        --nim-border: #2a3f38;
+        --nim-accent: #2dd4bf;
+        --nim-accent-soft: #163732;
+        --nim-accent-hover: #5eead4;
+        --nim-accent-light: #5eead4;
+        --nim-danger: #f87171;
+        --nim-danger-soft: #3a1f1f;
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+}
+
+:root[data-theme="dark"] {
+    --nim-bg: #10201c;
+    --nim-surface: #182823;
+    --nim-surface-alt: #1e332c;
+    --nim-text: #eaf2f0;
+    --nim-muted: #8fa39d;
+    --nim-border: #2a3f38;
+    --nim-accent: #2dd4bf;
+    --nim-accent-soft: #163732;
+    --nim-accent-hover: #5eead4;
+    --nim-accent-light: #5eead4;
+    --nim-danger: #f87171;
+    --nim-danger-soft: #3a1f1f;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme="light"] {
+    --nim-bg: #f2f6f5;
+    --nim-surface: #ffffff;
+    --nim-surface-alt: #eef4f3;
+    --nim-text: #16241f;
+    --nim-muted: #5f7570;
+    --nim-border: #dde6e3;
+    --nim-accent: #0f766e;
+    --nim-accent-soft: #e3f3f0;
+    --nim-accent-hover: #0b5e58;
+    --nim-accent-light: #34a396;
+    --nim-danger: #c0392b;
+    --nim-danger-soft: #fbeaea;
+    --shadow-sm: 0 1px 2px rgba(16, 40, 34, 0.06);
+    --shadow-md: 0 8px 24px rgba(16, 40, 34, 0.08);
 }
 
 * {
@@ -100,6 +158,22 @@ a:hover {
     text-decoration: none;
 }
 
+.theme-toggle {
+    background: var(--nim-surface-alt);
+    color: var(--nim-muted);
+    border: 1px solid var(--nim-border);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.theme-toggle:hover {
+    color: var(--nim-text);
+    border-color: var(--nim-accent);
+}
+
 .logout-form {
     display: flex;
     align-items: center;
@@ -127,6 +201,96 @@ main .content {
     box-shadow: var(--shadow-sm);
     padding: 1.5rem;
     margin-bottom: 1.5rem;
+}
+
+/* ---- Dashboard day navigation ---- */
+
+.day-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.day-nav-link {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--nim-accent);
+    white-space: nowrap;
+}
+
+.day-nav-link-disabled {
+    color: var(--nim-muted);
+    opacity: 0.5;
+}
+
+.day-nav-current {
+    font-weight: 700;
+    color: var(--nim-text);
+    text-align: center;
+    flex: 1;
+}
+
+/* ---- Dashboard daily score ---- */
+
+.score-card {
+    background: linear-gradient(135deg, var(--nim-accent) 0%, var(--nim-accent-hover) 100%);
+    color: #ffffff;
+    border-radius: 16px;
+    box-shadow: var(--shadow-md);
+    padding: 1.75rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.score-card-value {
+    font-size: 3.2rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.score-card-empty {
+    opacity: 0.6;
+}
+
+.score-card-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.85;
+    margin-top: 0.25rem;
+}
+
+.score-card-components {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.25rem;
+    margin-top: 1.1rem;
+}
+
+.score-card-component {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.85rem;
+}
+
+.score-card-component-label {
+    opacity: 0.8;
+}
+
+.score-card-component-value {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.score-card-hint {
+    font-size: 0.78rem;
+    opacity: 0.75;
+    margin: 1rem 0 0;
 }
 
 /* ---- Dashboard stat cards ---- */
@@ -192,7 +356,7 @@ main .content {
 .bar-chart-bar {
     width: 100%;
     max-width: 36px;
-    background: linear-gradient(180deg, var(--nim-accent) 0%, #34a396 100%);
+    background: linear-gradient(180deg, var(--nim-accent) 0%, var(--nim-accent-light) 100%);
     border-radius: 6px 6px 2px 2px;
     min-height: 3px;
     transition: opacity 0.15s;

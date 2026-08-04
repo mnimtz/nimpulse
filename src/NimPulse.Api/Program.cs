@@ -44,6 +44,7 @@ builder.Services.AddScoped<IAiProvider, AzureOpenAiProvider>();
 builder.Services.AddScoped<IAiProvider, OpenAiProvider>();
 builder.Services.AddScoped<AiProviderResolver>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<DailyScoreService>();
 builder.Services.AddScoped<ChatCoachService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AiModelListingService>();

@@ -9,7 +9,7 @@ namespace NimPulse.Api.Controllers.Api.V1;
 [ApiController]
 [Route("api/v1/health")]
 [Authorize]
-public class HealthController(NimPulseDbContext db, ReportService reports) : ControllerBase
+public class HealthController(NimPulseDbContext db, ReportService reports, DailyScoreService dailyScore) : ControllerBase
 {
     /// <summary>
     /// Upserts a batch of HealthKit samples for the authenticated user by ExternalId, so
@@ -119,6 +119,7 @@ public class HealthController(NimPulseDbContext db, ReportService reports) : Con
         [FromQuery] string type,
         [FromQuery] ReportPeriod period = ReportPeriod.Day,
         [FromQuery] int days = 30,
+        [FromQuery] DateOnly? date = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(type))
@@ -127,9 +128,30 @@ public class HealthController(NimPulseDbContext db, ReportService reports) : Con
         }
 
         var userId = HttpContext.User.RequireUserId();
-        var buckets = await reports.GetBucketsAsync(userId, type, period, days, cancellationToken);
+
+        // `date` verankert das Fenster auf einen bestimmten Tag statt "die letzten N Tage ab jetzt"
+        // — für Tag-für-Tag-Navigation (Dashboard) genutzt; ohne `date` unverändertes Verhalten.
+        var buckets = date is null
+            ? await reports.GetBucketsAsync(userId, type, period, days, cancellationToken)
+            : await reports.GetBucketsForDateAsync(userId, type, period, date.Value.ToDateTime(TimeOnly.MinValue), days, cancellationToken);
 
         return Ok(new Report(type, period.ToString(), buckets));
+    }
+
+    /// <summary>
+    /// v1-Tages-Score (Schritte/aktive Energie/Ruhepuls, gewichtet) — Startpunkt, keine
+    /// medizinische Bewertung. Siehe <see cref="DailyScoreService"/>.
+    /// </summary>
+    [HttpGet("score")]
+    public async Task<IActionResult> GetScore([FromQuery] DateOnly? date, CancellationToken cancellationToken = default)
+    {
+        var userId = HttpContext.User.RequireUserId();
+        var anchor = date is null
+            ? DateTimeOffset.Now
+            : new DateTimeOffset(date.Value.ToDateTime(TimeOnly.MinValue));
+
+        var result = await dailyScore.GetScoreAsync(userId, anchor, cancellationToken);
+        return Ok(result);
     }
 }
 

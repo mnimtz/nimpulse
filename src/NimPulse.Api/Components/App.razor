@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NimPulse</title>
     <base href="/" />
+    <script>
+        (function () {
+            var stored = localStorage.getItem('nim-theme');
+            if (stored === 'dark' || stored === 'light') {
+                document.documentElement.setAttribute('data-theme', stored);
+            }
+        })();
+
+        function toggleTheme() {
+            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var current = document.documentElement.getAttribute('data-theme') || (prefersDark ? 'dark' : 'light');
+            var next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('nim-theme', next);
+        }
+    </script>
     <link rel="stylesheet" href="app.css" />
     <HeadOutlet />
 </head>

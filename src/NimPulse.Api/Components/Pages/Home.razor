@@ -5,6 +5,7 @@
 @using NimPulse.Core.Health
 @inject NimPulseDbContext Db
 @inject ReportService ReportService
+@inject DailyScoreService DailyScoreService
 
 <PageTitle>Dashboard — NimPulse</PageTitle>
 
@@ -23,6 +24,48 @@ else if (!hasAnyData)
 }
 else
 {
+    <div class="day-nav">
+        <a class="day-nav-link" href="@("/?date=" + SelectedDate.AddDays(-1).ToString("yyyy-MM-dd"))">‹ Vorheriger Tag</a>
+        <span class="day-nav-current">@FormatDayLabel(SelectedDate)</span>
+        @if (SelectedDate < DateOnly.FromDateTime(DateTime.Now))
+        {
+            <a class="day-nav-link" href="@("/?date=" + SelectedDate.AddDays(1).ToString("yyyy-MM-dd"))">Nächster Tag ›</a>
+        }
+        else
+        {
+            <span class="day-nav-link day-nav-link-disabled">Nächster Tag ›</span>
+        }
+    </div>
+
+    @if (score is not null)
+    {
+        <div class="score-card">
+            <div class="score-card-value">
+                @if (score.Score is { } value)
+                {
+                    @($"{value:0}")
+                }
+                else
+                {
+                    <span class="score-card-empty">–</span>
+                }
+            </div>
+            <div class="score-card-label">Tages-Score</div>
+            <div class="score-card-components">
+                @foreach (var component in score.Components)
+                {
+                    <div class="score-card-component">
+                        <span class="score-card-component-label">@HealthTypeCatalog.GetDisplayName(component.Type)</span>
+                        <span class="score-card-component-value">
+                            @(component.Value is { } v ? $"{v:0} / {component.Goal:0}" : "keine Daten")
+                        </span>
+                    </div>
+                }
+            </div>
+            <p class="score-card-hint">v1-Formel aus Schritten, aktiver Energie und Ruhepuls — ein Startpunkt, keine medizinische Bewertung.</p>
+        </div>
+    }
+
     @if (headlineCards.Count > 0)
     {
         <div class="stat-cards">
@@ -40,7 +83,7 @@ else
     @if (stepChartBuckets is { Count: > 0 })
     {
         <div class="card">
-            <h2>Schritte — letzte 7 Tage</h2>
+            <h2>Schritte — 7 Tage bis @SelectedDate.ToString("dd.MM.")</h2>
             <div class="bar-chart">
                 @foreach (var b in stepChartBuckets)
                 {
@@ -72,8 +115,14 @@ else
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
+    [SupplyParameterFromQuery]
+    private string? date { get; set; }
+
+    private DateOnly SelectedDate => DateOnly.TryParse(date, out var parsed) ? parsed : DateOnly.FromDateTime(DateTime.Now);
+
     private bool isLoaded;
     private bool hasAnyData;
+    private DailyScoreResult? score;
     private List<HeadlineCard> headlineCards = new();
     private List<ReportBucket>? stepChartBuckets;
     private double stepChartMax;
@@ -101,6 +150,9 @@ else
             return;
         }
 
+        var anchorDate = SelectedDate.ToDateTime(TimeOnly.MinValue);
+        score = await DailyScoreService.GetScoreAsync(userId, anchorDate);
+
         var availableTypes = summary.Select(s => s.Type).ToHashSet();
 
         foreach (var (type, label, unit) in HeadlineTypes)
@@ -110,25 +162,29 @@ else
                 continue;
             }
 
-            var buckets = await ReportService.GetBucketsAsync(userId, type, ReportPeriod.Day, 7);
-            if (buckets.Count == 0)
-            {
-                continue;
-            }
+            var buckets = await ReportService.GetBucketsForDateAsync(userId, type, ReportPeriod.Day, anchorDate, daysBack: 7);
 
-            var latest = buckets.OrderByDescending(b => b.BucketStart).First();
-            var isToday = latest.BucketStart.ToLocalTime().Date == DateTimeOffset.Now.Date;
-            var label2 = isToday ? label : $"{label} ({latest.BucketStart.ToLocalTime():dd.MM.})";
+            // Samples carry whatever offset they were synced with (real syncs are UTC) while
+            // SelectedDate is a local calendar date — compare local dates, not raw DateTimeOffset
+            // instants, so "today" reliably matches today's samples regardless of offset.
+            var selectedBucket = buckets.FirstOrDefault(b => DateOnly.FromDateTime(b.BucketStart.ToLocalTime().DateTime) == SelectedDate);
 
             // Herzfrequenz ist ein Durchschnittswert über den Tag sinnvoll, alles andere (Schritte,
             // Energie) eine Tagessumme.
             var isAverageMetric = type is "heartRate" or "restingHeartRate";
-            var value = isAverageMetric ? latest.Average : latest.Sum;
-            var sub = isAverageMetric ? $"Min {latest.Min:0} · Max {latest.Max:0}" : "";
 
-            headlineCards.Add(new HeadlineCard(label2, $"{value:0}{(string.IsNullOrEmpty(unit) ? "" : " " + unit)}", sub));
+            if (selectedBucket is null)
+            {
+                headlineCards.Add(new HeadlineCard(label, "–", "Keine Daten an diesem Tag"));
+            }
+            else
+            {
+                var value = isAverageMetric ? selectedBucket.Average : selectedBucket.Sum;
+                var sub = isAverageMetric ? $"Min {selectedBucket.Min:0} · Max {selectedBucket.Max:0}" : "";
+                headlineCards.Add(new HeadlineCard(label, $"{value:0}{(string.IsNullOrEmpty(unit) ? "" : " " + unit)}", sub));
+            }
 
-            if (type == "stepCount")
+            if (type == "stepCount" && buckets.Count > 0)
             {
                 stepChartBuckets = buckets;
                 stepChartMax = buckets.Max(b => b.Sum);
@@ -139,6 +195,22 @@ else
         otherTypes = availableTypes.Where(t => !headlineTypeNames.Contains(t)).OrderBy(t => t).ToList();
 
         isLoaded = true;
+    }
+
+    private static string FormatDayLabel(DateOnly d)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        if (d == today)
+        {
+            return "Heute";
+        }
+
+        if (d == today.AddDays(-1))
+        {
+            return "Gestern";
+        }
+
+        return d.ToString("dddd, dd.MM.yyyy", System.Globalization.CultureInfo.GetCultureInfo("de-DE"));
     }
 
     private record HeadlineCard(string Label, string Value, string Sub);

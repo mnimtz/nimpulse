@@ -11,7 +11,28 @@ struct NimPulseApp: App {
                     ProgressView()
                 } else if auth.isLoggedIn {
                     NavigationStack {
-                        ContentView()
+                        TabView {
+                            DashboardView()
+                                .tabItem { Label("Dashboard", systemImage: "chart.bar.fill") }
+                            ContentView()
+                                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+                        }
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                NavigationLink {
+                                    ChatView()
+                                } label: {
+                                    Image(systemName: "bubble.left.and.bubble.right")
+                                }
+                            }
+                            ToolbarItem(placement: .topBarTrailing) {
+                                NavigationLink {
+                                    SettingsView()
+                                } label: {
+                                    Image(systemName: "gearshape")
+                                }
+                            }
+                        }
                     }
                 } else {
                     LoginView()

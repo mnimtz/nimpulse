@@ -36,9 +36,18 @@ public class ReportService(NimPulseDbContext db)
             .ToList();
     }
 
-    public async Task<List<ReportBucket>> GetBucketsAsync(Guid userId, string type, ReportPeriod period, int days, CancellationToken cancellationToken = default)
+    public Task<List<ReportBucket>> GetBucketsAsync(Guid userId, string type, ReportPeriod period, int days, CancellationToken cancellationToken = default)
+        => GetBucketsForDateAsync(userId, type, period, DateTimeOffset.UtcNow, days, cancellationToken);
+
+    /// <summary>
+    /// Same aggregation as <see cref="GetBucketsAsync"/>, but anchored on an arbitrary date instead
+    /// of "now" — used for day-by-day dashboard navigation (a past <paramref name="anchorDate"/>
+    /// must not pull in samples from days after it).
+    /// </summary>
+    public async Task<List<ReportBucket>> GetBucketsForDateAsync(Guid userId, string type, ReportPeriod period, DateTimeOffset anchorDate, int daysBack, CancellationToken cancellationToken = default)
     {
-        var since = DateTimeOffset.UtcNow.AddDays(-Math.Abs(days));
+        var until = BucketStart(anchorDate, ReportPeriod.Day).AddDays(1);
+        var since = until.AddDays(-Math.Abs(daysBack));
 
         // The SQLite EF Core provider can't translate a >= comparison on StartDate (DateTimeOffset)
         // when combined with any other predicate in the same server-side Where — confirmed via
@@ -50,7 +59,7 @@ public class ReportService(NimPulseDbContext db)
             .ToListAsync(cancellationToken);
 
         return samples
-            .Where(s => s.Type == type && s.StartDate >= since && s.Value != null)
+            .Where(s => s.Type == type && s.StartDate >= since && s.StartDate < until && s.Value != null)
             .GroupBy(s => BucketStart(s.StartDate, period))
             .Select(g => new ReportBucket(
                 BucketStart: g.Key,

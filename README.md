@@ -20,6 +20,7 @@ Self-hosted Familien-Gesundheitsplattform: Apple-Health-Sync, Mehrbenutzer, Ausw
 - [x] KI-Gateway: Admin wählt Standard-AI-Provider/-Modell/-Keys zur Laufzeit (Settings-Screen in App und Web-Dashboard) — keine Keys mehr im 1-Click-Deploy-Formular
 - [x] KI-Coach: fortlaufender Chat mit Gesundheitsdaten-Kontext, `/coach` (Web) + Chat-Screen (iOS)
 - [x] EF Core Migrations statt `EnsureCreated()` (Baseline-Bootstrap für Bestandsdaten)
+- [x] Dashboard: Tages-Score (v1-Formel), Tag-für-Tag-Navigation, Dark Mode — Web (`/`) + eigener iOS-Dashboard-Tab (Neubau, existierte vorher nicht)
 - [x] 1-Click-Azure-Deploy-Template (App Service + Azure Files/SQLite + Blob für Berichte)
 - [ ] PDF-Export der Reports (Phase 3)
 - [ ] Invite-Links für Familienmitglieder statt Admin-legt-direkt-an (später, falls gewünscht)
@@ -42,12 +43,18 @@ Läuft im selben Prozess/Container wie die API (Blazor Server, static server ren
 | Route | Zugriff | Zweck |
 |---|---|---|
 | `/login`, `/register` | Öffentlich | Anmeldung/Erstanlage. `/login` leitet automatisch zu `/register` weiter, solange noch kein Benutzer existiert. |
-| `/` | Angemeldet | Dashboard — Anzahl + letzter Wert pro Health-Datentyp. |
+| `/` | Angemeldet | Dashboard — Tages-Score, Kopf-Kacheln und 7-Tage-Chart für den gewählten Tag, Tag-für-Tag-Navigation (`?date=yyyy-MM-dd`). |
 | `/reports` | Angemeldet | Dieselbe Aggregation wie `GET /api/v1/health/reports`, als Tabelle mit Typ-/Zeitraum-Filter. |
 | `/admin` | Admin | Benutzerliste, neue Benutzer anlegen, löschen. |
 | `/settings` | Admin | KI-Gateway-Konfiguration (siehe unten). |
 
 Auth: Cookie fürs Web-Dashboard, Bearer/JWT für die iOS-App und andere API-Clients — beide Schemes laufen nebeneinander (`Program.cs`, "Smart"-Policy-Scheme wählt anhand des `Authorization`-Headers), teilen sich dieselben Claims/Rollen.
+
+Dark Mode folgt standardmäßig `prefers-color-scheme`, der "Design"-Knopf in der Nav-Leiste überschreibt das per `localStorage` (kein Blazor-Interactivity nötig, reines Inline-JS in `App.razor`).
+
+## Dashboard: Tages-Score
+
+`GET /api/v1/health/score?date=yyyy-MM-dd` (Datum optional, Default heute) — v1-Formel aus Schritten (Ziel 10.000/Tag), aktiver Energie (Ziel 500 kcal/Tag) und Ruhepuls (100 Punkte bei ≤60 bpm, linear fallend auf 50 bei 100 bpm), gewichtet 40/30/30. Fehlt ein Metrik-Typ am gewählten Tag, verteilt sich das Gewicht proportional auf die übrigen; ganz ohne Daten gibt es keinen Score statt einer erfundenen Zahl. **Ausdrücklich ein transparenter Startpunkt, keine medizinische Bewertung** (`DailyScoreService.cs`). Web (`/`) und iOS (Dashboard-Tab) zeigen denselben Score über denselben Endpoint. `GET /api/v1/health/reports` akzeptiert optional denselben `date`-Parameter, um den 7-Tage-Chart auf einen vergangenen Tag zu verankern statt auf "jetzt".
 
 ## KI-Gateway
 
