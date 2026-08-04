@@ -68,6 +68,14 @@ public class AiModelListingService(IHttpClientFactory httpClientFactory)
             throw new ArgumentException("Azure-OpenAI-Endpoint wird für die Deployment-Liste benötigt.");
         }
 
+        // SSRF-Schutz: nur echte Azure-OpenAI-Hosts über HTTPS zulassen. Ohne diese Prüfung könnte
+        // ein (Admin-)Aufrufer den Server dazu bringen, interne Adressen (z. B. das Cloud-Metadata-
+        // Endpoint 169.254.169.254 oder Intranet-Dienste) mit dem API-Key im Header anzufragen.
+        if (!IsAllowedAzureEndpoint(endpoint))
+        {
+            throw new ArgumentException("Azure-OpenAI-Endpoint muss eine HTTPS-URL auf *.openai.azure.com oder *.cognitiveservices.azure.com sein.");
+        }
+
         // Azure OpenAI erfordert vorab benannte Deployments statt roher Modell-IDs — die Liste
         // zeigt deshalb Deployment-Namen (genau das, was in "Azure-OpenAI-Deployment-Name" gehört).
         var client = httpClientFactory.CreateClient();
@@ -85,6 +93,28 @@ public class AiModelListingService(IHttpClientFactory httpClientFactory)
             .ToList();
     }
 
+    private static readonly string[] AllowedAzureHostSuffixes =
+    {
+        ".openai.azure.com",
+        ".cognitiveservices.azure.com",
+    };
+
+    private static bool IsAllowedAzureEndpoint(string endpoint)
+    {
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        if (uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        var host = uri.Host;
+        return AllowedAzureHostSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static async Task EnsureSuccess(HttpResponseMessage response, string providerLabel)
     {
         if (response.IsSuccessStatusCode)
@@ -92,7 +122,9 @@ public class AiModelListingService(IHttpClientFactory httpClientFactory)
             return;
         }
 
-        var body = await response.Content.ReadAsStringAsync();
-        throw new InvalidOperationException($"{providerLabel}-API antwortete mit {(int)response.StatusCode}: {body}");
+        // Deliberately do NOT reflect the upstream response body back to the caller — for an
+        // attacker-influenced endpoint that body could carry internal/SSRF response content.
+        await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException($"{providerLabel}-API antwortete mit {(int)response.StatusCode}.");
     }
 }

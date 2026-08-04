@@ -59,6 +59,22 @@ builder.Services.AddScoped<JwtTokenService>();
 
 var authOptions = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
 
+// Security guard: never run a real deployment on the well-known dev signing key (or a
+// missing/too-short one). Anyone who knows the key can forge JWTs for any user/role — a full
+// auth bypass — so fail fast instead of booting silently insecure. Development keeps the
+// convenience fallback so local runs don't need any setup.
+if (!builder.Environment.IsDevelopment())
+{
+    if (string.IsNullOrWhiteSpace(authOptions.JwtSigningKey)
+        || authOptions.JwtSigningKey == AuthOptions.InsecureDevSigningKey
+        || Encoding.UTF8.GetByteCount(authOptions.JwtSigningKey) < 32)
+    {
+        throw new InvalidOperationException(
+            "Auth:JwtSigningKey is missing, too short, or the insecure development default. " +
+            "Set a strong (>= 32 byte) Auth__JwtSigningKey before starting outside Development.");
+    }
+}
+
 // Zwei Auth-Schemes: Bearer/JWT für die iOS-App und andere API-Clients, Cookie fürs Browser-
 // Web-UI. "Smart" wählt anhand des Authorization-Headers, welches greift — beide teilen sich
 // dieselben Claims (siehe JwtTokenService/ClaimsPrincipalExtensions) und [Authorize]-Attribute,
